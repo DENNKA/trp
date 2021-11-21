@@ -1,0 +1,7 @@
+beautifulsoup4
+free-proxy
+prettytable
+python-mpv
+python-qbittorrent
+requests
+retry

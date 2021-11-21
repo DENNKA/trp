@@ -1,0 +1,7 @@
+*cache*
+*config*
+*cookies*
+*test*
+*.cfg
+*.log
+*.torrent

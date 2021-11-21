@@ -1,0 +1,3 @@
+[submodule "rutracker"]
+	path = rutracker
+	url = https://github.com/DENNKA/rutracker.git
