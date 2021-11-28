@@ -1,16 +1,11 @@
 import mpv
 
-import logging
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(levelname)s]:%(filename)s:%(funcName)s(%(lineno)d) : %(message)s",
-)
-
+def log_handler(level, prefix, text):
+    print("PLAYER: ", level, prefix, text)
 
 class Player():
     def __init__(self):
-        self.player = mpv.MPV(log_handler=logger, input_default_bindings=True, input_vo_keyboard=True, osc=True)
+        self.player = mpv.MPV(log_handler=log_handler, input_default_bindings=True, input_vo_keyboard=True, osc=True)
 
     def play(self, file, subtitles=None):
         self.player.play(file)

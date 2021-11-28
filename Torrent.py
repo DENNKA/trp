@@ -9,13 +9,14 @@ class Torrent():
         self.qb = Client(server)
 
         response = self.qb.login(username, password)
-        if response != "Ok.":
+        if response != "Ok." and response is not None:
             raise(RuntimeError("Login " + response))
         self.download_dir = download_dir
         self.default_reserve = default_reserve
 
         self.video_extensions = ['mkv', 'avi', 'mp4']
         self.subtitle_extensions = ['ass', 'srt']
+        self.font_extensions = ['ttf', 'otf']
 
     def _add_file(self, file):
         torrent_file = open(file, 'rb')
@@ -35,13 +36,29 @@ class Torrent():
             self.qb.set_file_priority(hash, id, 0)
             self.wait()
 
-        self._priority_all_subtitles()
+        self._priority_all_needed(hash)
 
         return hash
 
-    def _priority_all_subtitles(self):
-        ids_subtitles = self.get_ids_subtitles(hash)
-        self._priority_files(hash, ids_subtitles, [7 for i in range(0, len(ids_subtitles))])
+    def get_files_paths(self, hash):
+        return [x['name'] for x in self.qb.get_torrent_files(hash)]
+
+    def get_root(self, hash):
+        return self.qb.get_torrent(hash)['save_path']
+
+    def _priority_all_needed(self, hash):
+        ids = self.get_ids_subtitles(hash) + self.get_ids_fonts(hash)
+        self._priority_files(hash, ids, [7 for i in range(0, len(ids))])
+
+    def get_ids_fonts(self, hash):
+        ids = []  # TODO: need change this shit
+        for file in self.qb.get_torrent_files(hash):
+            #if file['name']
+            file_path = file['name'].split('/')[1:]
+            filename, extension = os.path.splitext(file_path[-1])
+            if extension.lstrip('.') in self.font_extensions:
+                ids.append(file['index'])
+        return ids
 
     def get_episode_path(self, hash, episode):
         for file in self.qb.get_torrent_files(hash):
@@ -52,12 +69,14 @@ class Torrent():
                     return os.path.join(*file_path)
 
     def get_subtitle_path(self, hash, episode):
+        subtitle_paths = []
         for file in self.qb.get_torrent_files(hash):
             file_path = file['name'].split('/')[1:]
             filename, extension = os.path.splitext(file_path[-1])
             if extension.lstrip('.') in self.subtitle_extensions:
                 if int(re.search(r'\d+', filename).group()) == episode:
-                    return os.path.join(*file_path)
+                    subtitle_paths.append(os.path.join(*file_path))
+        return subtitle_paths
 
     def get_ids_subtitles(self, hash):
         ids = []
@@ -139,7 +158,7 @@ class Torrent():
             print(priority)
             self._priority_files(new_hash, [file['index']], [priority])
 
-        self._priority_all_subtitles()
+        self._priority_all_needed(hash)
 
         return new_hash
 
