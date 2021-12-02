@@ -4,6 +4,8 @@ from retry import retry
 import tempfile
 from pathlib import Path
 from fp.fp import FreeProxy
+import sys
+sys.path.append('./rutracker')
 from rutracker import Rutracker
 
 import logging
