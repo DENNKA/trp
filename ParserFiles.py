@@ -47,6 +47,9 @@ class ParserFiles():
             else:
                 append_data = data[i]
             if file_type != "fonts":
+                if str(path).lower().find("creditless") != -1:
+                    files_dict["creditless"][str(Path(*path.parts[1:]))] = append_data
+                    continue
                 file_episode = int(re.search(r'\d+', path.stem).group())
                 if file_type == "subtitle":
                     try:
@@ -59,4 +62,7 @@ class ParserFiles():
                     files_dict[file_episode][file_type] = append_data
             else:
                 files_dict[file_type][str(Path(*path.parts[1 + subtitle_in_folder:-2]))].append(str(root / path))
+
+        files_dict['first_episode'] = min(filter(lambda e: isinstance(e, int), files_dict.keys()))
+
         return files_dict

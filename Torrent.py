@@ -43,6 +43,46 @@ class Torrent():
     def get_files_paths(self, hash):
         return [x['name'] for x in self.qb.get_torrent_files(hash)]
 
+    def is_available(self, hash, piece_start, piece_end, piece_size, bytes_start, bytes_end):
+        pieces = self.qb.get_torrent_piece_states(hash)
+        check_start = int(piece_start + (bytes_start / piece_size))
+        check_end = min(int(piece_start + (bytes_end / piece_size)), piece_end)
+        print(piece_start, piece_end, piece_size)
+        print(bytes_start, bytes_end)
+        for i in range(check_start, check_end):
+            print(pieces[i], end=" ")
+        print()
+        for i in range(check_start, check_end):
+            if (pieces[i] != 2):
+                return False
+        return True
+
+    def _get_seq_dl(self, hash):
+        for torrent in self.qb.torrents():
+            if torrent['hash'] == hash:
+                return [torrent['seq_dl'], torrent['f_l_piece_prio']]
+        return ValueError("Torrent not found: " + hash)
+
+    def enable_sequential_download(self, hash):
+        seq_dl = self._get_seq_dl(hash)
+        if seq_dl[0] == False:
+            self.qb.toggle_sequential_download(hash)
+        if seq_dl[1] == False:
+            self.qb.toggle_first_last_piece_priority(hash)
+
+    def disable_sequential_download(self, hash):
+        seq_dl = self._get_seq_dl(hash)
+        if seq_dl[0] == True:
+            self.qb.toggle_sequential_download(hash)
+        if seq_dl[1] == True:
+            self.qb.toggle_first_last_piece_priority(hash)
+
+    def get_files_data(self, hash):
+        return self.qb.get_torrent_files(hash)
+
+    def get_piece_size(self, hash):
+        return self.qb.get_torrent(hash)['piece_size']
+
     def get_root(self, hash):
         return self.qb.get_torrent(hash)['save_path']
 

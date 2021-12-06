@@ -1,7 +1,13 @@
+bin
+lib
+
+*token*
+*shikimori*
 *cache*
 *config*
 *cookies*
 *test*
 *.cfg
 *.log
+*.db
 *.torrent
