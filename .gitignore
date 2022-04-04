@@ -1,6 +1,7 @@
 bin
 lib
 
+.*
 *token*
 *shikimori*
 *cache*
@@ -11,3 +12,4 @@ lib
 *.log
 *.db
 *.torrent
+*.bac*

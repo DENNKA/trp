@@ -2,6 +2,9 @@ beautifulsoup4
 free-proxy
 prettytable
 python-mpv
-python-qbittorrent
+git+https://github.com/v1k45/python-qBittorrent
 requests
 retry
+PyQt5
+shikimori_api
+anitopy

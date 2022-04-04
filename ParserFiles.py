@@ -2,23 +2,41 @@ import re
 from pathlib import Path
 from collections import defaultdict
 
+class SingletonForParserFiles(object):
+    def __new__(self, *args, **kwargs):
+        try:
+            return self._instance
+        except AttributeError:
+            val = self._instance = object.__new__(self, *args, **kwargs)
 
-class ParserFiles():
+            self.video_extensions = ['mkv', 'avi', 'mp4']
+            self.subtitle_extensions = ['ass', 'srt']
+            self.audio_extensions = ['mka', 'ac3']
+            self.font_extensions = ['ttf', 'ttc', 'otf']
+            self.picture_extensions = ['jpg', 'jpeg', 'png']
+
+            zip1 = zip(self.video_extensions + self.subtitle_extensions + self.audio_extensions + self.font_extensions + self.picture_extensions,
+                       ["video" for i in range(len(self.video_extensions))] +
+                       ["subtitle" for i in range(len(self.subtitle_extensions))] +
+                       ["audio" for i in range(len(self.audio_extensions))] +
+                       ["fonts" for i in range(len(self.font_extensions))] +
+                       ["fonts" for i in range(len(self.picture_extensions))] # FIXME: "fonts"
+                       )
+            self.extension_dict = dict(zip1)
+
+            self.subtitles_folder_names = ['sub']
+
+            return val
+
+class ParserFiles(SingletonForParserFiles):
     def __init__(self):
-        self.video_extensions = ['mkv', 'avi', 'mp4']
-        self.subtitle_extensions = ['ass', 'srt']
-        self.audio_extensions = ['mka', 'ac3']
-        self.font_extensions = ['ttf', 'ttc', 'otf']
+        pass
 
-        zip1 = zip(self.video_extensions + self.subtitle_extensions + self.audio_extensions + self.font_extensions,
-                   ["video" for i in range(len(self.video_extensions))] +
-                   ["subtitle" for i in range(len(self.subtitle_extensions))] +
-                   ["audio" for i in range(len(self.audio_extensions))] +
-                   ["fonts" for i in range(len(self.font_extensions))]
-                   )
-        self.extension_dict = dict(zip1)
-
-        self.subtitles_folder_names = ['sub']
+    def get_type(self, path : str):
+        try:
+            return self.extension_dict[Path(path).suffix.lstrip('.').lower()]
+        except KeyError:
+            return "fonts" # FIXME: "fonts"
 
     def files_to_episodes(self, files, root, data=None):
         """
@@ -41,7 +59,7 @@ class ParserFiles():
         subtitle_in_folder = 1 if len(subtitles_folders) else 0
 
         for i, path in enumerate(paths):
-            file_type = self.extension_dict[path.suffix.lstrip('.')]
+            file_type = self.extension_dict[path.suffix.lstrip('.').lower()]
             if data is None:
                 append_data = str(root / path)
             else:

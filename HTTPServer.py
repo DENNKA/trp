@@ -12,11 +12,15 @@ import re
 import cgi
 import socket
 import errno
+import time
 
 DATA_DIR = getcwd()
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
-    pass
+    def __init__(self, *args, **kwargs):
+        self.episode_path = None
+        self.watched_percentage = None
+        HTTPServer.__init__(self, *args, **kwargs)
 
 
 class RequestHandler(SimpleHTTPRequestHandler):
@@ -44,6 +48,12 @@ class RequestHandler(SimpleHTTPRequestHandler):
             status = {"file_watched_percentage" : self.server.watched_percentage}
             self.wfile.write(json.dumps(status).encode())
             return None
+        splited = self.path.split('/')
+        print(splited)
+        if len(splited) > 2 and splited[-3] == "name":
+            name = splited[-2]
+            type = splited[-1]
+            self.server.trp.get_full_path(name, type)
         if self.range_from is None:
             # nothing to do here
             return SimpleHTTPRequestHandler.do_GET(self)
@@ -62,7 +72,9 @@ class RequestHandler(SimpleHTTPRequestHandler):
         try:
             while bytes_copied < bytes_to_copy:
                 if self.server.piece_range:
-                    self.server.is_available(hash, self.server.piece_range[0], self.server.piece_range[1], self.server.piece_size, self.range_from + bytes_copied, self.range_from + bytes_copied + buf_length)
+                    while not self.server.is_available(self.server.hash, self.server.piece_range[0], self.server.piece_range[1], self.server.piece_size, self.range_from + bytes_copied, self.range_from + bytes_copied + buf_length):
+                        print("wait for pieces")
+                        time.sleep(1)
                 read_buf = in_file.read(min(buf_length, bytes_to_copy-bytes_copied))
                 if len(read_buf) == 0:
                     break
@@ -113,8 +125,12 @@ class RequestHandler(SimpleHTTPRequestHandler):
             # Always read in binary mode. Opening files in text mode may cause
             # newline translations, making the actual size of the content
             # transmitted *less* than the content-length!
-            f = open(path, 'rb')
-        except IOError:
+            if self.server.episode_path and self.path == "/anime":
+                f = open(self.translate_path(self.server.episode_path), 'rb')
+            else:
+                f = open(path, 'rb')
+        except IOError as e:
+            print(e)
             self.send_error(404, "File not found")
             return None
 
@@ -246,6 +262,7 @@ def main(args=None):
     if len(args)>0:
         PORT = int(args[-1])
     serve_path = DATA_DIR
+    serve_path = "/mnt/sdb2/anime/Death Note [BDRip 720p]/"
     if len(args) > 1:
         serve_path = abspath(args[-2])
 

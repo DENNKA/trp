@@ -13,271 +13,285 @@ import platform
 import subprocess
 import shutil
 import json
+import signal
+# signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+from PyQt5.QtWidgets import QApplication
+import Gui
 
 import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="[%(levelname)s]:%(filename)s:%(funcName)s(%(lineno)d) : %(message)s",
 )
 
-
 from Player import Player
-from Torrent import Torrent
-from Parser import ParserRutracker
+from Torrent import *
+from Parser import TorrentTrackers
 from ParserFiles import ParserFiles
-from AnimeList import AnimeList
-from HTTPServer import get_server
-
+from AnimeList import AnimeLists
+from Server import get_server
+from Database import Database
+from Anime import Anime
+from File import File
 
 class Trp():
     def __init__(self, args):
+        self.database = Database()
         if args.migrate:
-            self.migrate()
-        self.conn = sqlite3.connect("anime.db")
-        self.conn.row_factory = sqlite3.Row
-        self.cursor = self.conn.cursor()
+            self.database.migrate()
 
-        self.create_table()
-
-        cfg = configparser.ConfigParser()
+        self.cfg = cfg = configparser.ConfigParser()
         cfg.read_file(open('settings.cfg'))
-        username = cfg['login']['username']
-        password = cfg['login']['password']
 
-        qb_server = cfg['qbittorrent']['server']
-        qb_username = cfg['qbittorrent']['username']
-        qb_password = cfg['qbittorrent']['password']
-        qb_download_dir = cfg['qbittorrent']['download_dir']
-        self.default_reserve = int(cfg['qbittorrent']['default_reserve'])
+        self.download_path = cfg['trp']['download_dir']
+        self.default_reserve = int(cfg['trp']['default_reserve'])
 
-        client_id = cfg['shikimori']['client_id']
-        client_secret = cfg['shikimori']['client_secret']
-        if client_id and client_secret:
-            self.anime_list = AnimeList(client_id, client_secret)
-        else:
-            self.anime_list = None
-
-        self.search_forums = cfg['tracker']['search_forums']
+        self.search_forums = cfg['Rutracker']['search_forums']
         if self.search_forums:
             self.search_forums = "&f=" + self.search_forums
 
-        try:
-            self.torrent = Torrent(qb_server, qb_username, qb_password, qb_download_dir, self.default_reserve)
-        except requests.exceptions.RequestException:
-            logger.error("Connection to qbittorrent failed, run qbittorrent and enable webUI")
-            raise
+        self.torrent_trackers = TorrentTrackers(cfg)
+        self.torrent_clients = TorrentClients(cfg)
+        self.anime_lists = AnimeLists(cfg)
 
         self.player = Player()
         self.parser_files = ParserFiles()
+
+        if args.console == False:
+            app = QApplication(sys.argv)
+            self.gui = Gui.Window(self, cfg, self.torrent_clients)
+            self.gui.showMaximized()
+            sys.exit(app.exec_())
 
         if args.update:
             self.update()
 
         if args.find:
-            self.parser = ParserRutracker(args.proxy, username=username, password=password)
             self.find()
             self.update()
 
         if args.add:
-            self.parser = ParserRutracker(args.proxy, username=username, password=password)
-            hash = self.add_anime(args.add)
+            anime = self.add_anime(args.add)
 
-            if hash:
-                self.change_watched_episodes(hash, args.watched) if args.watched else None
+            if anime.hash:
+                # self.change_watched_episodes(hash, args.watched) if args.watched else None
                 self.update()
 
         if args.watch:
-            self.httpd = get_server(port=args.port, serve_path=qb_download_dir)
-            server_address = "http://127.0.0.1:" + str(args.port) + "/"
-            server_thread = threading.Thread(None, self.httpd.serve_forever)
-            server_thread.start()
-            logger.info("Start video server on " + server_address)
+            if args.watch == "manual":
+                animes = self.database.get_animes()
+            else:
+                animes = self.database.get_animes_by_name(args.watch)
+
+            anime = animes[
+                           self.interactive([x['topic'] for x in animes], "Select anime: ",
+                                            zero_error="Not found anime", return_index=True)
+                           ]
+            server_address = self.start_server(args.port, qb_download_dir)
 
             try:
                 self.watch(args, server_address)
             except Exception:
                 raise
             finally:
-                self.httpd.shutdown()
-                self.httpd.socket.close()
-                server_thread.join()
+                self.shutdown_server()
 
-    def watch(self, args, server_address):
-        while True:
-            if args.watch == "manual":
-                sql = "SELECT * FROM anime ORDER BY id DESC"
-            else:
-                words = args.watch.split(" ")
-                sql = """SELECT * FROM anime WHERE topic LIKE '%""" + """%' AND topic LIKE '%""".join(words) + """%' COLLATE NOCASE"""
+    def start_server(self, port, serve_path, hash, is_available, torrent_file_id):
+        self.httpd = get_server(port, serve_path, hash, is_available, torrent_file_id)
+        # self.httpd.database = self.database
+        # self.httpd.trp = self
+        self.server_thread = threading.Thread(None, self.httpd.serve_forever)
+        self.server_thread.start()
+        server_address = "http://127.0.0.1:" + str(port) + "/"
+        logger.info("Start video server on " + server_address)
+        return server_address
 
-            self.cursor.execute(sql)
-            self.conn.commit()
-            animes = self.cursor.fetchall()
+    def shutdown_server(self):
+        self.httpd.shutdown()
+        self.httpd.socket.close()
+        self.server_thread.join()
 
-            anime = animes[
-                           self.interactive([x['topic'] for x in animes], "Select anime: ",
-                                            zero_error="Not found anime", return_index=True)
-                           ]
-            episode_number = anime['current_episode'] + 1
-            hash = anime['hash']
-            shikimori_id = anime['shikimori_id']
-            id = anime['id']
+    def get_is_available(self, anime : Anime):
+        return anime.torrent_client.is_available
 
-            if self.anime_list is not None and not shikimori_id:
-                anime_list_search_results = self.anime_list.search(self.extract_japanese_from_topic(anime['topic']))
+    def get_full_path(self, anime_name, type):
+        anime = self.get_anime(anime_name)
+        return os.path.join(anime.download_path, anime.get_file(type).path)
+
+    def get_file(self, anime_name, type):
+        return self.get_anime(anime_name).get_file(type)
+
+    def _str_to_classes(self, anime : Anime):
+        # torrent_tracker, torrent_client, anime_list strings to class
+        if anime.torrent_tracker and type(anime.torrent_tracker) == type(str()):
+            anime.torrent_tracker = self.torrent_trackers.get_class(anime.torrent_tracker)
+        if anime.torrent_client and type(anime.torrent_client) == type(str()):
+            anime.torrent_client = self.torrent_clients.get_class(anime.torrent_client)
+        if anime.anime_list and type(anime.anime_list) == type(str()):
+            anime.anime_list = self.anime_lists.get_class(anime.anime_list)
+
+    def get_anime(self, anime_name):
+        animes = self.database.get_animes_by_name(anime_name)
+        if len(animes) == 0:
+            raise ValueError("Not found")
+        anime = animes[0]
+        self._str_to_classes(anime)
+        return anime
+
+    def get_animes(self):
+        animes = self.database.get_animes()
+        for anime in animes:
+            self._str_to_classes(anime)
+        return animes
+
+    def delete_anime(self, anime : Anime, erase_data=False):
+        self.database.remove_anime(anime)
+        if erase_data:
+            anime.torrent_client.remove_torrent(anime.hash, erase_data)
+
+    def watch(self, anime : Anime, console=False, stream=False):
+        once = 1
+        while stream or once:
+            once = 0
+
+            logger.debug("Start update before watch")
+            anime.torrent_client.update_files(anime)
+            self.database.update_anime(anime)
+            logger.debug("Update finished")
+
+            episode_number = anime.episodes_watched + 1
+
+            if anime.anime_list and not anime.id_anime_list:
+                anime_list_search_results = anime.anime_list.search(self.extract_japanese_from_topic(anime.topic))
                 anime_list_search = anime_list_search_results[0]
-                if anime_list_search['episodes'] == anime['episodes']:
+                if anime_list_search['episodes'] == anime.total_episodes:
                     logger.info("Finded anime on animelist: " + anime_list_search['name'] + " | " + anime_list_search['russian']
                                 + " | type: " + anime_list_search['kind'])
-                    shikimori_id = anime_list_search['id']
-                    self.cursor.execute("UPDATE anime SET shikimori_id=? WHERE id=?", [shikimori_id, id])
-                    self.conn.commit()
+                    anime.id_anime_list = anime_list_search['id']
+                    anime.name_translated = anime_list_search['russian'] # TODO: russian to translated
+                    self.database.update_anime(anime)
                 else:
                     logger.error("Anime not finded on animelist")
             else:
-                logger.debug("Anime id on animelist: " + str(shikimori_id))
+                logger.debug("Anime id on animelist: " + str(anime.id_anime_list))
 
-            if episode_number > anime['last_episode_torrent']:
+            if episode_number > anime.last_episode_torrent:
                 logger.error("No more episodes")
                 break
             else:
-                logger.info("Watching episode {} / {} / {}".format(episode_number, anime['last_episode_torrent'], anime['episodes']))
+                logger.info("Watching episode {} / {} / {}".format(episode_number, anime.last_episode_torrent, anime.total_episodes))
 
-            root_path = self.torrent.get_root(hash)
-            files = self.parser_files.files_to_episodes(self.torrent.get_files_paths(hash), root_path)
-            files_data = self.torrent.get_files_data(hash)
-            shift = files['first_episode'] - 1
-            files_with_data = self.parser_files.files_to_episodes([x['name'] for x in files_data], root_path, files_data)
-            file_with_data = files_with_data[episode_number + shift]['video']
-            progress = file_with_data['progress']
-            if progress < 1.0:
-                self.httpd.hash = hash
-                self.httpd.piece_range = file_with_data['piece_range']
-                self.httpd.piece_size = self.torrent.get_piece_size(hash)
-                self.httpd.is_available = self.torrent.is_available
-                logger.info("File not finished, enabled sequential download")
-                self.torrent.enable_sequential_download(hash)
-            else:
-                self.httpd.piece_range = None
-
-            episode = files[episode_number + shift]
-            episode_path = episode["video"]
-            subtitles_dict = episode["subtitle"]
-            subtitle_group = anime['subtitle_group']
-            install_fonts = 0
-            if subtitles_dict:
-                if subtitle_group and subtitle_group in subtitles_dict.keys() and not args.reset_subtitles_group:
-                    group_name = subtitle_group
-                else:
-                    group_name = self.interactive(list(subtitles_dict.keys()), "Select subtitle: ")
-                    self.cursor.execute("UPDATE anime SET subtitle_group=? WHERE id=?", [group_name, id])
-                    self.conn.commit()
-                    install_fonts = 1
-                subtitle_file = episode["subtitle"][group_name]
-            else:
-                subtitle_file = None
-                group_name = ''
-
-            if (not anime['fonts_installed'] or install_fonts) and group_name in files["fonts"].keys():
-                logger.info("Installing fonts...")
-                os_name = platform.system()
-                font_list = files["fonts"][group_name]
-                if os_name == "Windows" or os_name == "Darwin":
-                    logger.warning("Installing fonts: detected not supported os " + os_name)
-                    logger.warning("Subtitle contains specific fonts, install they by yourself")
-                elif os_name == "Linux":
-                    for font in font_list:
-                        subprocess.call(["font-manager", "--install", font])
-
-                    self.cursor.execute("UPDATE anime SET fonts_installed=? WHERE id=?", [1, id])
-                    self.conn.commit()
-                    #os.makedirs("~/.fonts", exist_ok=True)
-                    #shutil.copy2(font, "~/.local/share/fonts/" + font.split('/')[-1])
-                    #subprocess.call(["fc-cache"])
-
-                logger.info("Installing fonts done!")
-
-            episode_address = episode_path.replace(root_path, server_address)
-            error = self.player.play(episode_address, subtitle_file)
-            raise Exception("STOP")
-
-            if progress < 1.0:
-                self.torrent.disable_sequential_download(hash)
-                logger.info("Disable sequential download")
-
+            root_path = anime.torrent_client.get_root(anime.hash)
+            shift = anime.first_episode - 1
+            # files = self.parser_files.files_to_episodes(self.torrent.get_files_paths(hash), root_path)
+            # files_data = self.torrent.get_files_data(hash)
+            # files_with_data = self.parser_files.files_to_episodes([x['name'] for x in files_data], root_path, files_data)
+            # file_with_data = files_with_data[episode_number + shift]['video']
+            # progress = file_with_data['progress']
+            video_file = anime.get_file("video")
             try:
-                file_watched_percentage = float(requests.get(server_address + "status").json()['file_watched_percentage'])
-            except Exception as e:
-                file_watched_percentage = 0.0
-                logger.error("Can't get watched percentage, set zero")
-                logger.error(e)
+                subtitle_file = anime.get_file("subtitle")
+            except ValueError:
+                subtitle_file = None
+            try:
+                audio_file = anime.get_file("audio")
+            except ValueError:
+                audio_file = None
 
-            needed_file_watched_percentage = 0.90
-            if file_watched_percentage > needed_file_watched_percentage and error == 0:
+            # episode = files[episode_number + shift]
+            # episode_path = episode["video"]
+            # subtitles_dict = episode["subtitle"]
+            # subtitle_group = anime['subtitle_group']
+            if anime.subtitle_group == "":
+                subtitle_groups = anime.get_subtitle_groups()
+                if len(subtitle_groups) == 1:
+                    anime.subtitle_group = subtitle_groups[0]
+                elif len(subtitle_groups) > 1:
+                    if console:
+                        anime.subtitle_group = self.interactive(subtitle_groups, "Select subtitle: ")
+                    else:
+                        anime.subtitle_group = self.gui.question(subtitle_groups, "Select subtitle: ")
 
-                if self.anime_list is not None:
+                    fonts = anime.get_files("font")
+
+                    try:
+                        self._install_fonts(fonts)
+                        anime.fonts_installed = 1
+                    except Exception as e:
+                        print(str(e))
+                    finally:
+                        self.database.update_anime(anime)
+
+            if anime.audio_group == "": # code repeat
+                audio_groups = anime.get_audio_groups()
+                if len(audio_groups) == 1:
+                    anime.subtitle_group = audio_groups[0]
+                elif len(audio_groups) > 1:
+                    if console:
+                        anime.audio_group = self.interactive(audio_groups, "Select audio: ")
+                    else:
+                        anime.audio_group = self.gui.question(audio_groups, "Select audio: ")
+                    self.database.update_anime(anime)
+
+            if stream:
+                self.httpd.episode_path = video_file.path.replace(root_path, "")
+                episode_address = server_address + "anime"
+                print(episode_address)
+                time.sleep(10)
+                while True:
+                    try:
+                        file_watched_percentage = float(requests.get(server_address + "status").json()['file_watched_percentage'])
+                        if file_watched_percentage and file_watched_percentage > 0.99:
+                            error = 0
+                            break
+                    except Exception:
+                        pass
+                    finally:
+                        time.sleep(2)
+            else:
+                if video_file.progress > 0.99:
+                    server_address = self.start_server(11111, anime.download_path, None, None, None)
+                else:
+                    anime.torrent_client.enable_sequential_download(anime.hash)
+                    server_address = self.start_server(11111, anime.download_path, anime.hash, self.get_is_available(anime), video_file.torrent_file_id)
+                episode_address = server_address + video_file.path
+                logger.info(f'Start playing {episode_address}')
+                error = self.player.play(episode_address, subtitle_file)
+                self.shutdown_server()
+                if video_file.progress < 0.99:
+                    anime.torrent_client.disable_sequential_download(anime.hash)
+
+            # if video_file.progress < 1.0:
+            #     self.torrent.disable_sequential_download(anime.hash)
+            #     logger.info("Disable sequential download")
+
+            # try:
+            #     file_watched_percentage = float(requests.get(server_address + "status").json()['file_watched_percentage'])
+            # except Exception as e:
+            #     file_watched_percentage = 0.0
+            #     logger.error("Can't get watched percentage, set zero")
+            #     logger.error(e)
+
+            # needed_file_watched_percentage = 0.90
+            # if file_watched_percentage > needed_file_watched_percentage and error == 0:
+            if error == 0:
+
+                if anime.anime_list:
                     logger.info("Animelist mark episode watched...")
-                    self.anime_list.mark_one(shikimori_id)
+                    anime.anime_list.mark_one(anime.id_anime_list)
                     logger.info("Animelist mark episode watched done!")
 
-                self.cursor.execute("UPDATE anime SET current_episode=? WHERE id=?", [episode_number, id])
-                self.conn.commit()
+                anime.episodes_watched = episode_number
+                self.database.update_anime(anime)
 
                 logger.info("Episode ended, episode marked watched")
                 self.update()
-                logger.info("Continue watching mode")
 
             else:
-                logger.info("Player closed, episode not marked watched")
+                logger.info("Player closed with error, episode not marked watched")
                 logger.info("Exiting watch mode")
-                break
-
-    def create_table(self):
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS "anime" (
-	            "id"	INTEGER PRIMARY KEY AUTOINCREMENT,
-	            "watch"	INTEGER DEFAULT 0,
-	            "forum"	TEXT,
-	            "topic"	TEXT,
-	            "id_torrent"	INTEGER UNIQUE,
-	            "size"	TEXT,
-	            "s"	INTEGER,
-	            "l"	INTEGER,
-	            "c"	INTEGER,
-	            "date"	INTEGER,
-	            "hash"	TEXT DEFAULT 0 UNIQUE,
-	            "current_episode"	INTEGER DEFAULT 0,
-	            "download_episodes"	INTEGER DEFAULT 0,
-	            "reserve_episodes"	INTEGER DEFAULT -1,
-	            "last_episode_torrent"	INTEGER,
-	            "episodes"	INTEGER,
-	            "date_added"	TEXT DEFAULT CURRENT_TIMESTAMP,
-	            "subtitle_group"	TEXT,
-	            "fonts_installed"	INTEGER,
-	            "shikimori_id"	INTEGER
-            )
-        """)
-        self.conn.commit()
-
-    def migrate(self):
-        os.rename("anime.db", ".prev.db")
-        self.conn = sqlite3.connect("anime.db")
-        self.cursor = self.conn.cursor()
-
-        self.create_table()
-
-        self.cursor.execute("attach database '.prev.db' as prev")
-        self.cursor.execute("SELECT * from prev.anime")
-        animes = self.cursor.fetchall()
-        zip_one = [c[0] for c in self.cursor.description]
-        for anime in animes:
-            rowDict = dict(zip(zip_one, anime))
-            placeholders = ', '.join(['?'] * len(rowDict))
-            columns = ', '.join(rowDict.keys())
-            sql = "INSERT INTO %s ( %s ) VALUES ( %s )" % ("anime", columns, placeholders)
-            self.cursor.execute(sql, list(rowDict.values()))
-        self.conn.commit()
 
     def interactive(self, options, text="", one_skip=True, zero_error=None, return_index=False):
         max = len(options)
@@ -296,72 +310,107 @@ class Trp():
             if num >= 0 and num < max:
                 return num if return_index else options[num]
 
+    def _install_fonts(self, fonts):
+        logger.info("Installing fonts...")
+        os_name = platform.system()
+        if os_name == "Windows" or os_name == "Darwin":
+            logger.warning("Installing fonts: detected not supported os " + os_name)
+            logger.warning("Subtitle contains specific fonts, install they by yourself")
+            return
+        elif os_name == "Linux":
+            for font in fonts:
+                subprocess.call(["font-manager", "--install", font])
+        logger.info("Installing fonts done!")
+
+    # def force_update(self, anime):
+    #     del anime.episodes
+    #     anime.episodes = None
+
     def update(self):
         logger.info("Start update")
 
-        self.cursor.execute("SELECT * FROM anime WHERE watch=1")
-        self.conn.commit()
-        for anime in self.cursor.fetchall():
-            needed = self.default_reserve if anime['reserve_episodes'] == -1 else anime['reserve_episodes']
-            needed = needed if needed < anime['last_episode_torrent'] - anime['current_episode'] else anime['last_episode_torrent'] - anime['current_episode']
-            download = []
-            hash = anime['hash']
-            files = self.parser_files.files_to_episodes(self.torrent.get_files_paths(hash), self.torrent.get_root(hash))
-            shift = files['first_episode'] - 1
-            if needed:
-                for i in range(anime['current_episode'] + 1, anime['current_episode'] + 1 + needed):
-                    download.append(i + shift)
+        for anime in self.get_animes():
+            anime.torrent_client.update_files(anime)
+            self.database.update_anime(anime)
 
-                self.torrent.load_episodes(hash, download, [3 if i == 0 else 2 if i == 1 else 1 for i in range(0, needed)])
-                self.torrent.resume(hash)
+            needed = self.default_reserve if anime.reserve_episodes == -1 else anime.reserve_episodes
+            needed = needed if needed < anime.last_episode_torrent - anime.episodes_watched else anime.last_episode_torrent - anime.episodes_watched
+            download = []
+            hash = anime.hash
+            # files = self.parser_files.files_to_episodes(anime.get_files(), self.torrent.get_root(hash))
+            # shift = files['first_episode'] - 1
+            if needed:
+                priorities = [3 if i == 0 else 2 if i == 1 else 1 for i in range(0, needed)]
+                for i in range(anime.episodes_watched + 1, anime.episodes_watched + 1 + needed):
+                    # download.append(i + shift)
+                    download.append(i)
+
+                for i in range(anime.episodes_watched + 1 + needed + 1, anime.last_episode_torrent):
+                    priorities.append(0)
+                    download.append(i)
+
+                for ep, priority in zip(download, priorities):
+                    try:
+                        episode = anime.get_episode(ep)
+                        episode.set_priority(priority)
+                    except ValueError as e:
+                        logger.error(e)
+                        return
+
+                anime.torrent_client.update_files(anime)
+                self.database.update_anime(anime)
+                # self.torrent.load_episodes(hash, download, [3 if i == 0 else 2 if i == 1 else 1 for i in range(0, needed)])
+                anime.torrent_client.resume(hash)
 
         logger.info("Update done!")
-
-    def change_watched_episodes(self, hash, watched):
-        self.cursor.execute("UPDATE anime SET current_episode=? WHERE hash=?", [watched, hash])
-        self.conn.commit()
 
     def extract_japanese_from_topic(self, topic):
         # del []() and split
         return re.sub("[\(\[].*?[\)\]]", "", topic).split("/")[1].strip()
 
     def find(self):
-        self.cursor.execute("SELECT * FROM anime WHERE last_episode_torrent != episodes AND watch=1")
-        self.conn.commit()
-        for anime in self.cursor.fetchall():
-            self.find_new_episodes(self.extract_japanese_from_topic(anime['topic']), anime['id_torrent'],
-                                   anime['last_episode_torrent'], anime['hash'])
+        for anime in self.database.get_animes_not_finished():
+            self._find_new_episodes(anime)
 
-    def find_new_episodes(self, name, id_torrent, last_episode, hash):
-        animes = self.parser.parse_anime(name)
+    def _find_new_episodes(self, anime_find : Anime):
+        animes = anime_find.torrent_tracker.parse_anime(self.extract_japanese_from_topic(anime_find.topic))
 
         episodes_in_torrents = []
 
+        anime_last_episode = 0
+
         for i, anime in enumerate(animes):
             try:
-                episodes_in_torrents.append(int(re.findall(r'\d+', animes[i][1][:animes[i][1].find("из")])[-1]))
+                episodes_in_torrents.append(int(re.findall(r'\d+', anime.topic[:anime.topic.find("из")])[-1]))
             except IndexError:
                 episodes_in_torrents.append(0)
-            if anime[2] == id_torrent:
+            if anime.id_torrent == anime_find.id_torrent:
                 num = i
                 anime_last_episode = episodes_in_torrents[-1]
+
+        if anime_last_episode < 1:
+            return
+
+        anime_finded = animes[num]
 
         #max_value = max(episodes_in_torrents)
         #max_index = episodes_in_torrents.index(max_value)
 
-        if anime_last_episode > last_episode:
-            logger.info("Finded new episodes: " + name + " EP: " + str(anime_last_episode))
-            anime = animes[num]
-            file = self.parser.get_torrent_file(anime[2])
+        if anime_last_episode > anime_find.last_episode_torrent:
+            logger.info("Finded new episodes: " + anime_finded.topic + " EP: " + str(anime_last_episode))
+            file = self.parser.get_torrent_file(anime_finded.id_torrent)
             logger.info("Replacing torrent, wait...")
-            new_hash = self.torrent.replace_torrent(hash, file)
+            anime_find.torrent_client.replace_torrent(anime_find, file) # anime_find auto updated in torrent
             logger.info("Replace torrent done!")
 
-            self.cursor.execute("UPDATE anime SET topic=?, last_episode_torrent=?, hash=? WHERE hash=?", [anime[0], anime_last_episode, new_hash, hash])
-            self.conn.commit()
+            self.database.update_anime(anime_find)
 
         else:
-            logger.info("No new episodes: {} EP: {} / {}".format(name, last_episode, anime_last_episode))
+            logger.info("No new episodes: {} EP: {} / {}".format(anime_find.topic, anime_find.last_episode_torrent, anime_last_episode))
+
+    def save_cfg(self):
+        with open('settings.cfg', 'w') as configure:
+            self.cfg.write(configure)
 
     def bytes_to(self, bytes, to, bsize=1024):
         """
@@ -375,57 +424,97 @@ class Trp():
 
         return(r)
 
-    def add_anime(self, name, auto=False):
-        animes = self.parser.parse_anime(name + self.search_forums)
+    def get_quality_list(self):
+        # -1 is manual
+        quality_list = [-1, 0, 480, 720, 1080, 1440, 2160]
+        return quality_list
+
+    def add_anime(self, name, quality, bdremux_only, torrent_tracker, torrent_client, anime_list, instant_play):
+        # quality 1080 -> index in quality_list, -1 is manual
+
+        quality_list = self.get_quality_list()
+
+        torrent_tracker = self.torrent_trackers.get_class(torrent_tracker)
+        torrent_client = self.torrent_clients.get_class(torrent_client)
+        anime_list = self.anime_lists.get_class(anime_list)
+
+        animes = torrent_tracker.parse_anime(name + self.search_forums)
 
         if len(animes) == 0:
             logger.error("Anime not found")
             return
 
-        if auto:
-            # NOT USE
-            for i, anime in enumerate(animes):
-                if anime[3].find("1080p") != -1 and anime[3].upper().find("BDREMUX") == -1:
-                    num = i
+        anime = None
+
+        if quality != -1:
+            quality = quality_list.index(int(quality))
+            quality = quality_list[quality]
+            for a in animes:
+                topic_lower = a.topic.lower()
+                if topic_lower.find(str(quality)) != -1 and (not bdremux_only or topic_lower.find("bdremux") != -1):
+                    anime = a
                     break
-            if not url:
-                for i, anime in enumerate(animes):
-                    if anime[3].find("720p") != -1 and anime[3].upper().find("BDREMUX") == -1:
-                        num = i
-                        break
-            if not url:
-                for i, anime in enumerate(animes):
-                    if anime[3].find("BDRip") != -1 and anime[3].upper().find("BDREMUX") == -1:
-                        num = i
+                if quality == 0:
+                    founded = True
+                    for q in quality_list[1:]:
+                        if topic_lower.find(str(q)) == -1:
+                            founded = False
+                            break
+                    if not founded:
+                        anime = a
                         break
         else:
             x = PrettyTable()
             x.field_names = ["i", "forum", "topic", "id", "size", "s", "l", "c", "date"]
+            add = list()
             for i, anime in enumerate(animes):
-                add = [i] + list(anime)
-                add[1] = fill(add[1], width=15)
-                add[2] = fill(add[2], width=70)
-                add[4] = str(round(self.bytes_to(add[4], 'g'), 2)) + " GiB"
-                add[-1] = time.strftime("%D", time.localtime(add[-1]))
+                add = [i, fill(anime.forum, width=12), fill(anime.topic, width=60), str(round(self.bytes_to(anime.size, 'g'), 2)) + " GiB",
+                        anime.seeds, anime.leechs, anime.downloads, time.strftime("%D", time.localtime(anime.torrent_date))]
                 x.add_row(add)
             print(x.get_string(fields=["i", "forum", "topic", "size", "s", "l", "c", "date"]))
             num = int(input("Type anime number: "))
+            anime = animes[num]
 
-        id_anime = animes[num][2]
+        if anime == None:
+            raise ValueError("Anime not selected")
 
-        file = self.parser.get_torrent_file(id_anime)
-        if file:
+        anime.torrent_tracker = torrent_tracker
+        anime.torrent_client = torrent_client
+        anime.anime_list = anime_list
+
+        file = anime.torrent_tracker.get_torrent_file(anime.id_torrent)
+        anime.total_episodes = anime.torrent_tracker.get_total_episodes(anime.id_torrent, anime.topic)
+
+        if (file == ""):
+            raise ValueError("Parser not returned file")
+
+        hash = ""
+
+        try:
+
             logger.info("Adding torrent file...")
-            hash = self.torrent.add_torrent(file)
+            hash = anime.torrent_client.add_torrent(file, self.download_path)
             logger.info("Adding torrent file done!")
 
-        episodes = re.findall(r'\d+', animes[num][1][animes[num][1].find("из"):])[0]
-        sql_list = [1] + list(animes[num]) + [hash] + [episodes] + [self.torrent.get_last_episode(hash)]
-        self.cursor.execute("""INSERT INTO anime(watch, forum, topic, id_torrent, size, s, l, c, date, hash, episodes, last_episode_torrent)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);""", sql_list)
-        self.conn.commit()
+            if hash == "" or hash == None:
+                raise ValueError("Torrent client not return hash")
 
-        return hash
+            anime.hash = hash
+            if instant_play:
+                anime.torrent_client.enable_sequential_download(anime.hash)
+            anime.torrent_client.update_files(anime)
+
+            total_episodes = re.findall(r'\d+', anime.topic[anime.topic.find("из"):])[0]
+            anime.total_episodes = total_episodes
+            self.database.update_anime(anime)
+
+        except Exception as e:
+            if hash != "":
+                anime.torrent_client.remove_torrent(hash)
+                anime.hash = ""
+            raise
+
+        return anime
 
 def main():
     parser = argparse.ArgumentParser(description='Torrent player')
@@ -438,6 +527,7 @@ def main():
     parser.add_argument('--reset_subtitles_group', action='store_true', default=False, help='If you want select another tranlater(s)')
     parser.add_argument('--migrate', action='store_true', default=False, help='Migrate from old database to new')
     parser.add_argument('--port', type=int, default=11111, help='Stream server port')
+    parser.add_argument('--console', action='store_true', default=False, help='Console mode')
     args = parser.parse_args()
     trp = Trp(args)
 
