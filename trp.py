@@ -52,7 +52,7 @@ class Trp():
         if self.search_forums:
             self.search_forums = "&f=" + self.search_forums
 
-        self.torrent_trackers = TorrentTrackers(cfg)
+        self.torrent_trackers = TorrentTrackers(cfg, args.proxy)
         self.torrent_clients = TorrentClients(cfg)
         self.anime_lists = AnimeLists(cfg)
 

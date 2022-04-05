@@ -82,8 +82,8 @@ class Rutracker(Parser):
         return re.findall(r'\d+', topic[topic.find("из"):])[0]
 
 class TorrentTrackers(ListClass):
-    def __init__(self, cfg):
+    def __init__(self, cfg, proxy=""):
         self.cfg = cfg
         self.classes = {
-                'Rutracker': Rutracker(),
+                'Rutracker': Rutracker(proxy),
                 }
