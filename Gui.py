@@ -1,5 +1,6 @@
 import sys
 from functools import partial
+import traceback
 from PyQt5 import QtWidgets
 
 from PyQt5.QtCore import Qt
@@ -163,12 +164,24 @@ class Window(QMainWindow):
         self.action_new.triggered.connect(self.add_anime)
         self.action_delete_anime.triggered.connect(self.delete_anime)
 
+    def _display_error(self, exception):
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Critical)
+        msg.setText(str(exception))
+        msg.setInformativeText("".join(traceback.TracebackException.from_exception(exception).format()))
+        msg.setWindowTitle("Error")
+        msg.exec_()
+
     def add_anime(self):
         add_anime_dialog = AddAnimeDialog(self.trp, self.cfg['trp']['quality'])
         add_anime_dialog.exec_()
         result = add_anime_dialog.get_result()
         if result:
-            anime = self.trp.add_anime(**result)
+            try:
+                anime = self.trp.add_anime(**result)
+            except Exception as e:
+                self._display_error(e)
+                return
             self.trp.update()
             self._update_row(anime)
             self.animes.append(anime)
