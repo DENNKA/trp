@@ -167,7 +167,8 @@ class Qbittorrent():
 
     def remove_torrent(self, hash, erase_data=False):
         self.qb._delete(hash, erase_data)
-        self._wait(3)
+        while hash not in self.qb.sync_main_data(self.rid).get("torrents_removed", []):
+            self._wait(0.2)
 
     def resume(self, hash):
         self.qb.resume(hash)
