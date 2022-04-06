@@ -43,10 +43,12 @@ class Rutracker(TorrentTracker):
         try:
             self.current_proxy = self.proxy.get_proxy(self)
             if self.current_proxy:
-                prx = {'https': self.current_proxy, 'http': self.current_proxy}
+                # prx = {'https': self.current_proxy, 'http': self.current_proxy}
+                prx = {self.current_proxy.split("://")[0]: self.current_proxy}
+                logger.info(f'Proxy: {prx}')
             else:
                 prx = {}
-            self.tracker = rutracker.Rutracker(username, password, proxy=prx)
+            self.tracker = rutracker.Rutracker(username, password, proxies=prx)
         except requests.exceptions.RequestException:
             raise ConnectionFailed()
         self.inited = True
