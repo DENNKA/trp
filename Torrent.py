@@ -24,6 +24,7 @@ def make_iter(x):
 class Qbittorrent():
     def __init__(self):
         self.inited = False
+        self.rid = 0
         self.cl_to_db = [('name', 'path'), ('size', 'size'), ('progress', 'progress'), ('priority', 'priority'), ('piece_range', 'piece_range'), ('availability', 'availability'), ('index', 'torrent_file_id')]
 
     def init(self, cfg):
@@ -44,10 +45,17 @@ class Qbittorrent():
 
     def _add_file(self, file, download_path):
         torrent_file = open(file, 'rb')
-        self.qb.download_from_file(torrent_file, savepath=download_path, category="trp", paused=True, sequentialDownload=False, firstLastPiecePrio=False)
-        self._wait(3)
-
-        return self.get_last_torrent_hash()
+        self.qb.download_from_file(torrent_file, savepath=download_path, category="trp_added", paused=True, sequentialDownload=False, firstLastPiecePrio=False)
+        while True:
+            updated = self.qb.sync_main_data(self.rid)
+            self.rid = updated['rid']
+            try:
+                for hash, torrent in updated['torrents'].items():
+                    if torrent["category"] == "trp_added":
+                        self.qb.set_category(hash, "trp")
+                        return hash
+            except KeyError:
+                self._wait(0.2)
 
     def _get_files(self, hash):
         return self.qb.get_torrent_files(hash)
