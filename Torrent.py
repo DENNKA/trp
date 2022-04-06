@@ -88,7 +88,6 @@ class Qbittorrent():
                     if file_torrent['priority'] != file_priority:
                         logger.debug(f'Set priority {file.path.split("/")[-1]} = {file.priority}')
                         self.qb.set_file_priority(hash, file.torrent_file_id, file_priority)
-                        self._wait()
                     for elem in self.cl_to_db:
                         if elem[1] == 'priority':
                             continue
