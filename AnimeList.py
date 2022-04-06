@@ -13,8 +13,10 @@ def token_saver(token: dict):
 
 
 class AnimeList():
-    def __init__(self):
+    def __init__(self, proxy):
+        # FIXME: proxy not implemented
         self.inited = False
+        self.proxy = proxy
 
     def init(self, cfg):
         if self.inited: return
@@ -77,8 +79,8 @@ class AnimeList():
                 retry -= 1
 
 class AnimeLists(ListClass):
-    def __init__(self, cfg):
+    def __init__(self, cfg, proxy):
         self.cfg = cfg
         self.classes = {
-                'Shikimori': Shikimori(),
+                'Shikimori': Shikimori(proxy),
                 }

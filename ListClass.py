@@ -10,5 +10,5 @@ class ListClass():
         try:
             class1.init(self.cfg)
         except Exception:
-            pass
+            raise
         return class1

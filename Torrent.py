@@ -166,7 +166,8 @@ class Qbittorrent():
         self.qb.resume(hash)
 
 class TorrentClients(ListClass):
-    def __init__(self, cfg):
+    def __init__(self, cfg, proxy):
+        # proxy is not used
         self.cfg = cfg
         self.classes = {
                 'Qbittorrent': Qbittorrent(),

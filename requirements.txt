@@ -1,5 +1,5 @@
 beautifulsoup4
-free-proxy
+proxyscrape
 prettytable
 python-mpv
 git+https://github.com/v1k45/python-qBittorrent

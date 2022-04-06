@@ -19,48 +19,37 @@ logging.basicConfig(
 
 from Anime import Anime
 
-class Parser():
-    def __init__(self, proxy=""):
+class TorrentTracker():
+    def __init__(self, proxy):
         self.download_path = os.path.join(tempfile.gettempdir(), "trp")
         Path(self.download_path).mkdir(parents=True, exist_ok=True)
-
-        self.auto_proxy = False
         self.proxy = proxy
-        if proxy == "auto":
-            self.auto_proxy = True
 
-    @retry(delay=0.1, logger=logger)
-    def get_proxy(self):
-        if self.proxy.find("pool://") != -1:
-            prx = requests.get(self.proxy.replace("pool://", "")).text
-            logger.info(f'Use proxy {prx}')
-            return prx
-        if self.auto_proxy:
-            logger.info("Finding proxy...")
-            prx = FreeProxy(timeout=1.5, rand=True).get()
-            logger.info("Finding proxy done! " + prx)
-            return prx
-        return self.proxy
+class ConnectionFailed(Exception):
+    def __init__(self):
+        super().__init__("Connection to torrent tracker failed")
 
-
-class Rutracker(Parser):
-    def __init__(self, proxy=""):
+class Rutracker(TorrentTracker):
+    def __init__(self, proxy):
         self.inited = False
         super().__init__(proxy)
         self.tr_to_db = ['forum', 'topic', 'id_torrent', 'size', 'seeds', 'leechs', 'downloads', 'torrent_date']
 
+    @retry(logger=logger, tries=3)
     def init(self, cfg):
         if self.inited: return
         username = cfg['Rutracker']['username']
         password = cfg['Rutracker']['password']
         try:
-            prx = self.get_proxy()
-            self.tracker = rutracker.Rutracker(username, password, proxies={'https': prx, 'http': prx})
+            self.current_proxy = self.proxy.get_proxy(self)
+            if self.current_proxy:
+                prx = {'https': self.current_proxy, 'http': self.current_proxy}
+            else:
+                prx = {}
+            self.tracker = rutracker.Rutracker(username, password, proxy=prx)
         except requests.exceptions.RequestException:
-            logger.error("Connection to Rutracker failed")
-            raise
+            raise ConnectionFailed()
         self.inited = True
-
 
     def _search(self, name):
         return self.tracker.search(name)
@@ -82,7 +71,7 @@ class Rutracker(Parser):
         return re.findall(r'\d+', topic[topic.find("из"):])[0]
 
 class TorrentTrackers(ListClass):
-    def __init__(self, cfg, proxy=""):
+    def __init__(self, cfg, proxy):
         self.cfg = cfg
         self.classes = {
                 'Rutracker': Rutracker(proxy),

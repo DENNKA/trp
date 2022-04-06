@@ -20,6 +20,8 @@ from PyQt5.QtWidgets import QApplication
 import Gui
 
 import logging
+
+from Proxy import Proxy
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.DEBUG,
@@ -52,9 +54,11 @@ class Trp():
         if self.search_forums:
             self.search_forums = "&f=" + self.search_forums
 
-        self.torrent_trackers = TorrentTrackers(cfg, args.proxy)
-        self.torrent_clients = TorrentClients(cfg)
-        self.anime_lists = AnimeLists(cfg)
+        self.proxy = Proxy(cfg)
+
+        self.torrent_trackers = TorrentTrackers(cfg, self.proxy)
+        self.torrent_clients = TorrentClients(cfg, self.proxy)
+        self.anime_lists = AnimeLists(cfg, self.proxy)
 
         self.player = Player()
         self.parser_files = ParserFiles()
@@ -434,11 +438,13 @@ class Trp():
 
         quality_list = self.get_quality_list()
 
-        torrent_tracker = self.torrent_trackers.get_class(torrent_tracker)
-        torrent_client = self.torrent_clients.get_class(torrent_client)
-        anime_list = self.anime_lists.get_class(anime_list)
+        anime_with_classes = Anime()
+        anime_with_classes.torrent_tracker = torrent_tracker
+        anime_with_classes.torrent_client = torrent_client
+        anime_with_classes.anime_list = anime_list
+        self._str_to_classes(anime_with_classes)
 
-        animes = torrent_tracker.parse_anime(name + self.search_forums)
+        animes = anime_with_classes.torrent_tracker.parse_anime(name + self.search_forums)
 
         if len(animes) == 0:
             logger.error("Anime not found")
@@ -478,9 +484,9 @@ class Trp():
         if anime == None:
             raise ValueError("Anime not selected")
 
-        anime.torrent_tracker = torrent_tracker
-        anime.torrent_client = torrent_client
-        anime.anime_list = anime_list
+        anime.torrent_tracker = anime_with_classes.torrent_tracker
+        anime.torrent_client = anime_with_classes.torrent_client
+        anime.anime_list = anime_with_classes.anime_list
 
         file = anime.torrent_tracker.get_torrent_file(anime.id_torrent)
         anime.total_episodes = anime.torrent_tracker.get_total_episodes(anime.id_torrent, anime.topic)
