@@ -349,7 +349,7 @@ class Trp():
                     # download.append(i + shift)
                     download.append(i)
 
-                for i in range(anime.episodes_watched + 1 + needed + 1, anime.last_episode_torrent):
+                for i in range(anime.episodes_watched + 1 + needed + 1, anime.last_episode_torrent + 1):
                     priorities.append(0)
                     download.append(i)
 
