@@ -77,12 +77,11 @@ class Anime(DbElement.DbElement):
         if file.type == "fonts":
             self.fonts.append(file)
             return
+
         parsed = anitopy.parse(file.path.split("/")[-1])
-        # episode_number = int(self._find_episode_number(file.path))
-        print(parsed)
         try:
             episode_number = int(parsed['episode_number'].lstrip('0'))
-        except KeyError:
+        except Exception:
             print(f'WARNING: use secondary parse method, file: {file.path}')
             episode_number = self._find_episode_number(file.path)
 
