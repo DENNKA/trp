@@ -1,6 +1,16 @@
 import re
+import anitopy
 from pathlib import Path
 from collections import defaultdict
+
+import Episode
+
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="[%(levelname)s]:%(filename)s:%(funcName)s(%(lineno)d) : %(message)s",
+)
 
 class SingletonForParserFiles(object):
     def __new__(self, *args, **kwargs):
@@ -19,12 +29,11 @@ class SingletonForParserFiles(object):
                        ["video" for i in range(len(self.video_extensions))] +
                        ["subtitle" for i in range(len(self.subtitle_extensions))] +
                        ["audio" for i in range(len(self.audio_extensions))] +
-                       ["fonts" for i in range(len(self.font_extensions))] +
-                       ["fonts" for i in range(len(self.picture_extensions))] # FIXME: "fonts"
+                       ["fonts" for i in range(len(self.font_extensions))]
                        )
             self.extension_dict = dict(zip1)
 
-            self.subtitles_folder_names = ['sub']
+            self.subtitles_folder_names = ['sub', 'subs', 'субтитры']
 
             return val
 
@@ -32,55 +41,90 @@ class ParserFiles(SingletonForParserFiles):
     def __init__(self):
         pass
 
-    def get_type(self, path : str):
+    def get_type(self, path : Path):
+        print(path)
+        print(path.suffix)
         try:
-            return self.extension_dict[Path(path).suffix.lstrip('.').lower()]
+            return self.extension_dict[path.suffix.lstrip('.').lower()]
         except KeyError:
-            return "fonts" # FIXME: "fonts"
+            return "unknown"
 
-    def files_to_episodes(self, files, root, data=None):
+    def _find_episode_number(self, path : Path):
+        parsed = anitopy.parse(path.name)
+        try:
+            return int(parsed['episode_number'].lstrip('0'))
+        except Exception as e:
+            logger.warning(f'WARNING: use secondary parse method, file: {str(path)}')
+            logger.debug(str(e))
+            try:
+                return int(re.search(r"\b(?:e(?:p(?:isode)?)?|0x|S\d\dEP?)?\s*?(\d{1,4})\b", path.name, re.IGNORECASE).group(1))
+            except Exception as e:
+                logger.error("Can't parse episode number " + str(e))
+                raise
+
+    def _get_subtitles_folders(self, paths : list):
+        subtitles_folders = [x.parts[1:-1] for x in paths if Path(x.parts[1]).suffix == ""  # folders
+                             and len([name for name in self.subtitles_folder_names if(name in str(x.parts[1]).lower())])]  # folder contains self.subtitles_folder_names
+        return subtitles_folders
+
+    def _detect_extra(self, path : Path):
+        bool = any(x in str(path).lower() for x in ["creditless", "bonus", "extra", "special"]) # ! only lower case
+        if bool:
+            return bool
+        return any(x.lower() in ["nc"] for x in path.parts) # ! only lower case
+
+    def parse(self, files : list, root : str):
         """
         files: list of files (TORRENT_NAME/file1)
         root: torrent download location (/disk/TORRENTS_FOLDER)
-        data: list data. Replacing path with data (path[i] = data[i])
-        Returns dict (path is joined root and file path)
-        {
-            episode_number : { video : path, subtitle : { group_name1 : path, group_name2 : path }, audio : path }
-            fonts : { group_name1 : [path1, path2], group_name2 : [path1, path2] }
-        }
+        return list(Episode()) - episodes, list(File()) - fonts, first episode, last episode
         """
-        paths = [Path(file) for file in files]
-        root_anime = Path(root) / Path(paths[0].parts[0])
-        files_dict = defaultdict(lambda: defaultdict(list))
 
-        subtitles_folders = [x for x in root_anime.iterdir() if x.is_dir()  # folders
-                             and len([name for name in self.subtitles_folder_names if(name in str(x).lower())])]  # folder contains self.subtitles_folder_names
+        episodes = defaultdict(Episode.Episode)
+        fonts = list()
+
+        paths = [Path(file.path) for file in files]
+        # root_anime = Path(root) / Path(paths[0].parts[0])
+        # files_dict = defaultdict(lambda: defaultdict(list))
+
+        subtitles_folders = self._get_subtitles_folders(paths)
 
         subtitle_in_folder = 1 if len(subtitles_folders) else 0
 
-        for i, path in enumerate(paths):
-            file_type = self.extension_dict[path.suffix.lstrip('.').lower()]
-            if data is None:
-                append_data = str(root / path)
-            else:
-                append_data = data[i]
-            if file_type != "fonts":
-                if str(path).lower().find("creditless") != -1:
-                    files_dict["creditless"][str(Path(*path.parts[1:]))] = append_data
+        for path, file in zip(paths, files):
+            file.type = self.get_type(path)
+            print(file.type)
+            if file.type != "fonts":
+                if self._detect_extra(path):
+                    file.group = str(Path(*path.parts[1:])).rstrip('.')
+                    episodes[-1].add_file(file)
                     continue
-                file_episode = int(re.search(r'\d+', path.stem).group())
-                if file_type == "subtitle":
-                    try:
-                        files_dict[file_episode][file_type][str(Path(*path.parts[1 + subtitle_in_folder:-1]))] = append_data
-                    except TypeError:
-                        files_dict[file_episode][file_type] = defaultdict()
-                        files_dict[file_episode][file_type][str(Path(*path.parts[1 + subtitle_in_folder:-1]))] = append_data
-                        pass
+                file_episode = self._find_episode_number(path)
+                if file.type == "subtitle":
+                    file.group = str(Path(*path.parts[1 + subtitle_in_folder:-1])).rstrip('.')
+                    episodes[file_episode].add_file(file)
                 else:
-                    files_dict[file_episode][file_type] = append_data
+                    episodes[file_episode].add_file(file)
             else:
-                files_dict[file_type][str(Path(*path.parts[1 + subtitle_in_folder:-2]))].append(str(root / path))
+                file.group = str(Path(*path.parts[1 + subtitle_in_folder:-2])).rstrip('.')
+                episodes[0].add_file(file)
+                fonts.append(file)
 
-        files_dict['first_episode'] = min(filter(lambda e: isinstance(e, int), files_dict.keys()))
+        for episode_number, episode in episodes.items():
+            episode.episode_number = episode_number
 
-        return files_dict
+        first_episode = min(filter(lambda e: isinstance(e, int) and e > 0, episodes.keys()))
+        last_episode = max(filter(lambda e: isinstance(e, int) and e > 0, episodes.keys()))
+
+        return list(episodes.values()), fonts, first_episode, last_episode
+
+if __name__ == "__main__":
+    import pickle
+    pf = ParserFiles()
+    with open('add_files.pkl', 'rb') as f:
+        x = pickle.load(f)
+    episodes, fonts, first_episode, last_episode = pf.parse(x[0], x[1])
+    for episode in episodes:
+        print([x.path for x in episode.files], episode.episode_number)
+    print([x.path for x in fonts])
+    print(first_episode, last_episode)

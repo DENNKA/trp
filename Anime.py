@@ -1,9 +1,11 @@
 import re
 import anitopy
+import pickle
 
 from Episode import Episode
 import DbElement
 from File import File
+from ParserFiles import ParserFiles
 
 class Anime(DbElement.DbElement):
     def __init__(self, vars = None):
@@ -73,6 +75,11 @@ class Anime(DbElement.DbElement):
     def _first_number(self, string : str):
         return int(re.search(r'\d+', string).group())
 
+    def add_files(self, files : list):
+        with open('add_files.pkl', 'wb') as f:
+            pickle.dump([files, self.download_path], f)
+        self.episodes, self.fonts, self.first_episode, self.last_episode_torrent = ParserFiles().parse(files, root=self.download_path)
+
     def add_file(self, file : File):
         if file.type == "fonts":
             self.fonts.append(file)
@@ -114,6 +121,10 @@ class Anime(DbElement.DbElement):
                 return file
 
         raise ValueError("{} file not found: {}".format(type.title(), self.topic))
+
+    def reset_files(self):
+        self.episodes = list()
+        self.fonts = list()
 
     def _get_groups(self, type):
         groups = list()

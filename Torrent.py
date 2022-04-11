@@ -74,18 +74,22 @@ class Qbittorrent():
         # 0 1 2 3 -> 0 1 6 7
         return [6 if priority == 2 else 7 if priority == 3 else priority for priority in priorities]
 
-    def update_files(self, anime : Anime):
+    def update_files(self, anime : Anime, forse=False):
         hash = anime.hash
         files_torrent = self.qb.get_torrent_files(hash)
         anime.download_path = self.get_root(anime.hash)
+        if forse:
+            anime.reset_files()
         if len(anime.get_files()) == 0:
+            files = list()
             for file_torrent in files_torrent:
                 file = File()
                 for elem in self.cl_to_db:
                     file.set_variable(elem[1], file_torrent[elem[0]])
 
                 file.update()
-                anime.add_file(file)
+                files.append(file)
+            anime.add_files(files)
             return
 
         # FIXME: add update new files in torrent and erase code above
@@ -96,6 +100,15 @@ class Qbittorrent():
                     if file_torrent['priority'] != file_priority:
                         logger.debug(f'Set priority {file.path.split("/")[-1]} = {file.priority}')
                         self.qb.set_file_priority(hash, file.torrent_file_id, file_priority)
+                        priority_changed = False
+                        while not priority_changed:
+                            self._wait(0.1)
+                            updated = self.qb.get_torrent_files(anime.hash)
+                            for f in updated:
+                                if f['index'] == file.torrent_file_id:
+                                    if f['priority'] == file_priority:
+                                        priority_changed = True
+                                    break
                     for elem in self.cl_to_db:
                         if elem[1] == 'priority':
                             continue
@@ -167,7 +180,19 @@ class Qbittorrent():
 
     def remove_torrent(self, hash, erase_data=False):
         self.qb._delete(hash, erase_data)
-        while hash not in self.qb.sync_main_data(self.rid).get("torrents_removed", []):
+        while True:
+            sync = self.qb.sync_main_data(self.rid)
+            print(sync)
+            self.rid = sync['rid']
+            if hash in sync.get("torrents_removed", []): # not work in some cases
+                break
+            founded = False
+            for h, _ in sync.get('torrents', {}).items():
+                if hash == h:
+                    founded = True
+                    break
+            if not founded:
+                break
             self._wait(0.2)
 
     def resume(self, hash):

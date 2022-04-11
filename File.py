@@ -1,7 +1,5 @@
 from DbElement import DbElement
 
-from ParserFiles import ParserFiles
-
 import os
 import re
 
@@ -24,20 +22,4 @@ class File(DbElement):
             self.set_with_dict(vars)
 
     def update(self):
-        if not self.path:
-            ValueError("Path empty")
-
-        self.type = self._extract_type(self.path)
-        self.group = self._extract_group(self.path)
-
-    def _get_extension(self, path):
-        filename, file_extension = os.path.splitext(path)
-        return file_extension, filename
-
-    def _extract_type(self, path):
-        return ParserFiles().get_type(path)
-
-    def _extract_group(self, path):
-        # if len path.parts > 2 -> in folder
-        return ""
-
+        pass

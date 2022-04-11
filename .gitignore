@@ -13,3 +13,4 @@ lib
 *.db
 *.torrent
 *.bac*
+*.pkl

@@ -136,17 +136,21 @@ class Trp():
         if anime.anime_list and type(anime.anime_list) == type(str()):
             anime.anime_list = self.anime_lists.get_class(anime.anime_list)
 
-    def get_anime(self, anime_name):
+    def get_anime(self, anime_name, unnecessary=[]):
         animes = self.database.get_animes_by_name(anime_name)
         if len(animes) == 0:
             raise ValueError("Not found")
         anime = animes[0]
+        for var in unnecessary:
+            anime.set_variable(var, None)
         self._str_to_classes(anime)
         return anime
 
-    def get_animes(self):
+    def get_animes(self, unnecessary=[]):
         animes = self.database.get_animes()
         for anime in animes:
+            for var in unnecessary:
+                anime.set_variable(var, None)
             self._str_to_classes(anime)
         return animes
 
@@ -159,11 +163,6 @@ class Trp():
         once = 1
         while stream or once:
             once = 0
-
-            logger.debug("Start update before watch")
-            anime.torrent_client.update_files(anime)
-            self.database.update_anime(anime)
-            logger.debug("Update finished")
 
             episode_number = anime.episodes_watched + 1
 
@@ -333,7 +332,7 @@ class Trp():
     def update(self):
         logger.info("Start update")
 
-        for anime in self.get_animes():
+        for anime in self.get_animes(["torrent_tracker", "anime_list"]):
             anime.torrent_client.update_files(anime)
             self.database.update_anime(anime)
 
@@ -343,13 +342,21 @@ class Trp():
             hash = anime.hash
             # files = self.parser_files.files_to_episodes(anime.get_files(), self.torrent.get_root(hash))
             # shift = files['first_episode'] - 1
+            try:
+                anime.get_episode(-1).set_priority(0)
+            except ValueError:
+                pass
+            try:
+                anime.get_episode(0).set_priority(3)
+            except ValueError:
+                pass
             if needed:
                 priorities = [3 if i == 0 else 2 if i == 1 else 1 for i in range(0, needed)]
                 for i in range(anime.episodes_watched + 1, anime.episodes_watched + 1 + needed):
                     # download.append(i + shift)
                     download.append(i)
 
-                for i in range(anime.episodes_watched + 1 + needed + 1, anime.last_episode_torrent + 1):
+                for i in range(anime.episodes_watched + 1 + needed, anime.last_episode_torrent + 1):
                     priorities.append(0)
                     download.append(i)
 
@@ -360,6 +367,8 @@ class Trp():
                     except ValueError as e:
                         logger.error(e)
                         return
+
+                logger.debug("Priorities: " + str(dict(zip(download, priorities))))
 
                 anime.torrent_client.update_files(anime)
                 self.database.update_anime(anime)
@@ -447,8 +456,7 @@ class Trp():
         animes = anime_with_classes.torrent_tracker.parse_anime(name + self.search_forums)
 
         if len(animes) == 0:
-            logger.error("Anime not found")
-            return
+            raise ValueError("Anime not found")
 
         anime = None
 
