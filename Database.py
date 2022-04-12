@@ -125,7 +125,8 @@ class Database:
             anime.add_episode(episode)
 
     def _get_files(self, episode : Episode):
-        sql = "SELECT * FROM file JOIN files_types ON file.type_id == files_types.id WHERE episode_id = ?"
+        # sql = "SELECT * FROM file JOIN files_types ON file.type_id == files_types.id WHERE episode_id = ?"
+        sql = "SELECT * FROM file WHERE episode_id = ?"
         self.cursor.execute(sql, [episode.id])
         files_db = self.cursor.fetchall()
         columns = [i[0] for i in self.cursor.description]

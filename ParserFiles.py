@@ -134,8 +134,10 @@ if __name__ == "__main__":
     pf = ParserFiles()
     with open('add_files.pkl', 'rb') as f:
         x = pickle.load(f)
-    episodes, fonts, first_episode, last_episode = pf.parse(x[0], x[1])
+    episodes, fonts, first_episode, last_episode, errors = pf.parse(x[0], x[1])
     for episode in episodes:
-        print([x.path for x in episode.files], episode.episode_number)
+        print([f'{x.path} - {x.group.upper()}' for x in episode.files], episode.episode_number)
+    for error in errors:
+        print(error)
     print([x.path for x in fonts])
     print(first_episode, last_episode)

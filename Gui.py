@@ -36,8 +36,10 @@ class Window(QMainWindow):
         self.info_grid.addWidget(self.image, 1, 1, 2, 2, Qt.AlignTop)
         watch_button = QPushButton("Watch")
         self.info_grid.addWidget(watch_button, 3, 1, Qt.AlignTop)
+        update_button = QPushButton("Update all")
+        self.info_grid.addWidget(update_button, 4, 1, Qt.AlignTop)
         delete_button = QPushButton("Delete")
-        self.info_grid.addWidget(delete_button, 4, 1, Qt.AlignTop)
+        self.info_grid.addWidget(delete_button, 5, 1, Qt.AlignTop)
         self.split.addWidget(self.right)
         self.split.setStretchFactor(0, 2)
         self.split.setStretchFactor(1, 1)
@@ -91,11 +93,30 @@ class Window(QMainWindow):
         # delete_button.clicked.connect(self.action_delete_anime)
         watch_button.clicked.connect(self.watch_anime)
         delete_button.clicked.connect(self.delete_anime)
+        update_button.clicked.connect(self.update)
+
+    def question(self, items : list, text):
+        try:
+            ValueError("123")
+        except Exception as e:
+            self._display_error(e)
+
+        item, ok = QInputDialog.getItem(self, text, "Select one", items, 0, False)
+        if ok and item:
+            return item
+        return -1
+
+    def update(self):
+        self.trp.update()
 
     def watch_anime(self):
-        row = self.table.currentRow()
-        anime = self.animes[row]
-        self.trp.watch(anime)
+        try:
+            row = self.table.currentRow()
+            anime = self.animes[row]
+            self.trp.watch(anime)
+        except Exception as e:
+            self._display_error(e)
+            return
 
     def _table_click(self, row_id):
         self._update_row(self.animes[row_id], row_id)
@@ -176,7 +197,7 @@ class Window(QMainWindow):
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Critical)
         msg.setText(str(exception))
-        msg.setInformativeText("".join(traceback.TracebackException.from_exception(exception).format()))
+        msg.setDetailedText("".join(traceback.TracebackException.from_exception(exception).format()))
         msg.setWindowTitle("Error")
         msg.exec_()
 

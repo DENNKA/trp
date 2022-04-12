@@ -16,9 +16,11 @@ class Episode(DbElement):
     def add_file(self, file : File):
         self.files.append(file)
 
-    def set_priority(self, priority : int):
+    def set_priority(self, priority : int, groups = None):
+        # groups : list()
         for file in self.files:
-            file.priority = priority
+            if groups == None or file.group in groups:
+                file.priority = priority
 
     def get_files_from_type(self, type_name):
         files = []

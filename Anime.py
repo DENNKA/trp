@@ -29,8 +29,8 @@ class Anime(DbElement.DbElement):
         self.total_episodes = 0
         self.last_episode_torrent = 0
         self.date_added = 0
-        self.subtitle_group = 0
-        self.audio_group = 0
+        self.subtitle_group = "-1"
+        self.audio_group = "-1"
         self.fonts_installed = 0
         self.first_episode = 0
 

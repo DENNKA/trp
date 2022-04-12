@@ -163,6 +163,7 @@ class Trp():
         once = 1
         while stream or once:
             once = 0
+            # anime.torrent_client.update_files(anime)
 
             episode_number = anime.episodes_watched + 1
 
@@ -186,13 +187,6 @@ class Trp():
             else:
                 logger.info("Watching episode {} / {} / {}".format(episode_number, anime.last_episode_torrent, anime.total_episodes))
 
-            root_path = anime.torrent_client.get_root(anime.hash)
-            shift = anime.first_episode - 1
-            # files = self.parser_files.files_to_episodes(self.torrent.get_files_paths(hash), root_path)
-            # files_data = self.torrent.get_files_data(hash)
-            # files_with_data = self.parser_files.files_to_episodes([x['name'] for x in files_data], root_path, files_data)
-            # file_with_data = files_with_data[episode_number + shift]['video']
-            # progress = file_with_data['progress']
             video_file = anime.get_file("video")
             try:
                 subtitle_file = anime.get_file("subtitle")
@@ -207,52 +201,22 @@ class Trp():
             # episode_path = episode["video"]
             # subtitles_dict = episode["subtitle"]
             # subtitle_group = anime['subtitle_group']
-            if anime.subtitle_group == "":
-                subtitle_groups = anime.get_subtitle_groups()
-                if len(subtitle_groups) == 1:
-                    anime.subtitle_group = subtitle_groups[0]
-                elif len(subtitle_groups) > 1:
-                    if console:
-                        anime.subtitle_group = self.interactive(subtitle_groups, "Select subtitle: ")
-                    else:
-                        anime.subtitle_group = self.gui.question(subtitle_groups, "Select subtitle: ")
-
-                    fonts = anime.get_files("font")
-
-                    try:
-                        self._install_fonts(fonts)
-                        anime.fonts_installed = 1
-                    except Exception as e:
-                        print(str(e))
-                    finally:
-                        self.database.update_anime(anime)
-
-            if anime.audio_group == "": # code repeat
-                audio_groups = anime.get_audio_groups()
-                if len(audio_groups) == 1:
-                    anime.subtitle_group = audio_groups[0]
-                elif len(audio_groups) > 1:
-                    if console:
-                        anime.audio_group = self.interactive(audio_groups, "Select audio: ")
-                    else:
-                        anime.audio_group = self.gui.question(audio_groups, "Select audio: ")
-                    self.database.update_anime(anime)
-
             if stream:
-                self.httpd.episode_path = video_file.path.replace(root_path, "")
-                episode_address = server_address + "anime"
-                print(episode_address)
-                time.sleep(10)
-                while True:
-                    try:
-                        file_watched_percentage = float(requests.get(server_address + "status").json()['file_watched_percentage'])
-                        if file_watched_percentage and file_watched_percentage > 0.99:
-                            error = 0
-                            break
-                    except Exception:
-                        pass
-                    finally:
-                        time.sleep(2)
+                pass
+                # self.httpd.episode_path = video_file.path.replace(root_path, "")
+                # episode_address = server_address + "anime"
+                # print(episode_address)
+                # time.sleep(10)
+                # while True:
+                #     try:
+                #         file_watched_percentage = float(requests.get(server_address + "status").json()['file_watched_percentage'])
+                #         if file_watched_percentage and file_watched_percentage > 0.99:
+                #             error = 0
+                #             break
+                #     except Exception:
+                #         pass
+                #     finally:
+                #         time.sleep(2)
             else:
                 if video_file.progress > 0.99:
                     server_address = self.start_server(11111, anime.download_path, None, None, None)
@@ -325,15 +289,45 @@ class Trp():
                 subprocess.call(["font-manager", "--install", font])
         logger.info("Installing fonts done!")
 
-    # def force_update(self, anime):
-    #     del anime.episodes
-    #     anime.episodes = None
+    def _select_groups(self, anime : Anime, force=False, console=False):
+        if self.cfg.getboolean('trp', 'subtitles') and (anime.subtitle_group == "-1" or force):
+            subtitle_groups = anime.get_subtitle_groups()
+            if len(subtitle_groups) == 1:
+                anime.subtitle_group = subtitle_groups[0]
+                logger.info(f'Auto select subtitle group: {anime.subtitle_group}')
+            elif len(subtitle_groups) > 1:
+                subtitle_groups = ['-1'] + subtitle_groups
+                if console:
+                    anime.subtitle_group = self.interactive(subtitle_groups, "Select subtitle: ")
+                else:
+                    anime.subtitle_group = str(self.gui.question(subtitle_groups, "Select subtitle: "))
 
-    def update(self):
+                fonts = anime.get_files("font")
+
+                try:
+                    self._install_fonts(fonts)
+                    anime.fonts_installed = 1
+                except Exception as e:
+                    logger.error("Can't install fonts: " + str(e))
+
+        if self.cfg.getboolean('trp', 'audio') and (anime.audio_group == "-1" or force):
+            audio_groups = anime.get_audio_groups()
+            if len(audio_groups) == 1:
+                anime.audio_group = audio_groups[0]
+                logger.info(f'Auto select audio group: {anime.subtitle_group}')
+            elif len(audio_groups) > 1:
+                audio_groups = ['-1'] + audio_groups
+                if console:
+                    anime.audio_group = str(self.interactive(audio_groups, "Select audio: "))
+                else:
+                    anime.audio_group = self.gui.question(audio_groups, "Select audio: ")
+
+    def update(self, console=False):
         logger.info("Start update")
 
         for anime in self.get_animes(["torrent_tracker", "anime_list"]):
             anime.torrent_client.update_files(anime)
+            self._select_groups(anime, console)
             self.database.update_anime(anime)
 
             needed = self.default_reserve if anime.reserve_episodes == -1 else anime.reserve_episodes
@@ -347,7 +341,8 @@ class Trp():
             except ValueError:
                 pass
             try:
-                anime.get_episode(0).set_priority(3)
+                anime.get_episode(0).set_priority(0)
+                anime.get_episode(0).set_priority(3, [anime.subtitle_group, anime.audio_group])
             except ValueError:
                 pass
             if needed:
@@ -363,7 +358,7 @@ class Trp():
                 for ep, priority in zip(download, priorities):
                     try:
                         episode = anime.get_episode(ep)
-                        episode.set_priority(priority)
+                        episode.set_priority(priority, [anime.subtitle_group, anime.audio_group])
                     except ValueError as e:
                         logger.error(e)
                         return
