@@ -37,13 +37,15 @@ class SingletonForParserFiles(object):
 
             return val
 
+class CantParseEpisodeNumber(Exception):
+    def __init__(self, file):
+        super().__init__("Can't parse episode number " + str(file))
+
 class ParserFiles(SingletonForParserFiles):
     def __init__(self):
-        pass
+        self.exceptions = []
 
     def get_type(self, path : Path):
-        print(path)
-        print(path.suffix)
         try:
             return self.extension_dict[path.suffix.lstrip('.').lower()]
         except KeyError:
@@ -60,7 +62,7 @@ class ParserFiles(SingletonForParserFiles):
                 return int(re.search(r"\b(?:e(?:p(?:isode)?)?|0x|S\d\dEP?)?\s*?(\d{1,4})\b", path.name, re.IGNORECASE).group(1))
             except Exception as e:
                 logger.error("Can't parse episode number " + str(e))
-                raise
+                raise CantParseEpisodeNumber(path)
 
     def _get_subtitles_folders(self, paths : list):
         subtitles_folders = [x.parts[1:-1] for x in paths if Path(x.parts[1]).suffix == ""  # folders
@@ -80,6 +82,8 @@ class ParserFiles(SingletonForParserFiles):
         return list(Episode()) - episodes, list(File()) - fonts, first episode, last episode
         """
 
+        self.exceptions = []
+
         episodes = defaultdict(Episode.Episode)
         fonts = list()
 
@@ -87,19 +91,26 @@ class ParserFiles(SingletonForParserFiles):
         # root_anime = Path(root) / Path(paths[0].parts[0])
         # files_dict = defaultdict(lambda: defaultdict(list))
 
-        subtitles_folders = self._get_subtitles_folders(paths)
+        # subtitles_folders = self._get_subtitles_folders(paths)
 
-        subtitle_in_folder = 1 if len(subtitles_folders) else 0
+        # subtitle_in_folder = 1 if len(subtitles_folders) else 0
+        subtitle_in_folder = 0
 
         for path, file in zip(paths, files):
             file.type = self.get_type(path)
-            print(file.type)
             if file.type != "fonts":
                 if self._detect_extra(path):
                     file.group = str(Path(*path.parts[1:])).rstrip('.')
                     episodes[-1].add_file(file)
                     continue
-                file_episode = self._find_episode_number(path)
+
+                try:
+                    file_episode = self._find_episode_number(path)
+                except CantParseEpisodeNumber as e:
+                    self.exceptions.append(e)
+                    episodes[-1].add_file(file)
+                    continue
+
                 if file.type == "subtitle":
                     file.group = str(Path(*path.parts[1 + subtitle_in_folder:-1])).rstrip('.')
                     episodes[file_episode].add_file(file)
@@ -116,7 +127,7 @@ class ParserFiles(SingletonForParserFiles):
         first_episode = min(filter(lambda e: isinstance(e, int) and e > 0, episodes.keys()))
         last_episode = max(filter(lambda e: isinstance(e, int) and e > 0, episodes.keys()))
 
-        return list(episodes.values()), fonts, first_episode, last_episode
+        return list(episodes.values()), fonts, first_episode, last_episode, self.exceptions
 
 if __name__ == "__main__":
     import pickle

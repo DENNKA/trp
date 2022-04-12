@@ -7,6 +7,13 @@ import DbElement
 from File import File
 from ParserFiles import ParserFiles
 
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="[%(levelname)s]:%(filename)s:%(funcName)s(%(lineno)d) : %(message)s",
+)
+
 class Anime(DbElement.DbElement):
     def __init__(self, vars = None):
 
@@ -78,7 +85,12 @@ class Anime(DbElement.DbElement):
     def add_files(self, files : list):
         with open('add_files.pkl', 'wb') as f:
             pickle.dump([files, self.download_path], f)
-        self.episodes, self.fonts, self.first_episode, self.last_episode_torrent = ParserFiles().parse(files, root=self.download_path)
+        self.episodes, self.fonts, self.first_episode, self.last_episode_torrent, errors = ParserFiles().parse(files, root=self.download_path)
+        for number in range(self.first_episode, self.last_episode_torrent + 1):
+            episode = self.get_episode(number)
+            if len(episode.get_files_from_type("video")) == 0:
+                logger.critical("Video not found from episode: " + str(number))
+        return errors
 
     def add_file(self, file : File):
         if file.type == "fonts":

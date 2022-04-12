@@ -164,6 +164,14 @@ class Window(QMainWindow):
         self.action_new.triggered.connect(self.add_anime)
         self.action_delete_anime.triggered.connect(self.delete_anime)
 
+    def display_errors(self, exceptions):
+        if not len(exceptions): return
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Critical)
+        msg.setText("\n".join([str(x) for x in exceptions]))
+        msg.setWindowTitle("Error")
+        msg.exec_()
+
     def _display_error(self, exception):
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Critical)

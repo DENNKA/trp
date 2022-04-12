@@ -89,8 +89,7 @@ class Qbittorrent():
 
                 file.update()
                 files.append(file)
-            anime.add_files(files)
-            return
+            return anime.add_files(files)
 
         # FIXME: add update new files in torrent and erase code above
         for file in anime.get_files():
@@ -116,6 +115,7 @@ class Qbittorrent():
                     break
 
                 # raise(ValueError("File from db not found in torrent"))
+        return []
 
     def get_last_torrent_hash(self):
         return self.qb.torrents(sort="added_on", reverse=True, limit=1)[0]['hash']
@@ -182,7 +182,6 @@ class Qbittorrent():
         self.qb._delete(hash, erase_data)
         while True:
             sync = self.qb.sync_main_data(self.rid)
-            print(sync)
             self.rid = sync['rid']
             if hash in sync.get("torrents_removed", []): # not work in some cases
                 break

@@ -19,3 +19,10 @@ class Episode(DbElement):
     def set_priority(self, priority : int):
         for file in self.files:
             file.priority = priority
+
+    def get_files_from_type(self, type_name):
+        files = []
+        for file in self.files:
+            if file.type == type_name:
+                files.append(file)
+        return files

@@ -442,7 +442,7 @@ class Trp():
         quality_list = [-1, 0, 480, 720, 1080, 1440, 2160]
         return quality_list
 
-    def add_anime(self, name, quality, bdremux_only, torrent_tracker, torrent_client, anime_list, instant_play):
+    def add_anime(self, name, quality, bdremux_only, torrent_tracker, torrent_client, anime_list, instant_play, console=False):
         # quality 1080 -> index in quality_list, -1 is manual
 
         quality_list = self.get_quality_list()
@@ -516,7 +516,10 @@ class Trp():
             anime.hash = hash
             if instant_play:
                 anime.torrent_client.enable_sequential_download(anime.hash)
-            anime.torrent_client.update_files(anime)
+
+            errors = anime.torrent_client.update_files(anime)
+            if not console:
+                self.gui.display_errors(errors)
 
             total_episodes = re.findall(r'\d+', anime.topic[anime.topic.find("из"):])[0]
             anime.total_episodes = total_episodes
