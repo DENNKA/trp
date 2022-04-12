@@ -1,7 +1,6 @@
 beautifulsoup4
 proxyscrape
 prettytable
-python-mpv
 git+https://github.com/v1k45/python-qBittorrent
 requests
 retry
