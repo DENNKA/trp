@@ -70,18 +70,18 @@ class Trp():
             sys.exit(app.exec_())
 
         if args.update:
-            self.update()
+            self.update(args.console)
 
         if args.find:
             self.find()
-            self.update()
+            self.update(args.console)
 
         if args.add:
-            anime = self.add_anime(args.add)
+            anime = self.add_anime(args.add, cfg["trp"]["quality"], cfg.getboolean("trp", "bdremux_only"),
+                    cfg["trp"]["torrent_tracker"], cfg["trp"]["torrent_client"], cfg["trp"]["anime_list"], False,  console=True)
 
             if anime.hash:
-                # self.change_watched_episodes(hash, args.watched) if args.watched else None
-                self.update()
+                self.update(args.console)
 
         if args.watch:
             if args.watch == "manual":
@@ -90,17 +90,11 @@ class Trp():
                 animes = self.database.get_animes_by_name(args.watch)
 
             anime = animes[
-                           self.interactive([x['topic'] for x in animes], "Select anime: ",
+                           self.interactive([x.topic for x in animes], "Select anime: ",
                                             zero_error="Not found anime", return_index=True)
                            ]
-            server_address = self.start_server(args.port, qb_download_dir)
 
-            try:
-                self.watch(args, server_address)
-            except Exception:
-                raise
-            finally:
-                self.shutdown_server()
+            self.watch(args, args.console)
 
     def start_server(self, port, serve_path, hash, is_available, torrent_file_id):
         self.httpd = get_server(port, serve_path, hash, is_available, torrent_file_id)
@@ -127,14 +121,14 @@ class Trp():
     def get_file(self, anime_name, type):
         return self.get_anime(anime_name).get_file(type)
 
-    def _str_to_classes(self, anime : Anime):
+    def _str_to_classes(self, anime : Anime, raise_on_error=False):
         # torrent_tracker, torrent_client, anime_list strings to class
         if anime.torrent_tracker and type(anime.torrent_tracker) == type(str()):
-            anime.torrent_tracker = self.torrent_trackers.get_class(anime.torrent_tracker)
+            anime.torrent_tracker = self.torrent_trackers.get_class(anime.torrent_tracker, raise_on_error)
         if anime.torrent_client and type(anime.torrent_client) == type(str()):
-            anime.torrent_client = self.torrent_clients.get_class(anime.torrent_client)
+            anime.torrent_client = self.torrent_clients.get_class(anime.torrent_client, raise_on_error)
         if anime.anime_list and type(anime.anime_list) == type(str()):
-            anime.anime_list = self.anime_lists.get_class(anime.anime_list)
+            anime.anime_list = self.anime_lists.get_class(anime.anime_list, raise_on_error)
 
     def get_anime(self, anime_name, unnecessary=[]):
         animes = self.database.get_animes_by_name(anime_name)
@@ -163,7 +157,7 @@ class Trp():
         once = 1
         while stream or once:
             once = 0
-            # anime.torrent_client.update_files(anime)
+            anime.torrent_client.update_files(anime)
 
             episode_number = anime.episodes_watched + 1
 
@@ -254,7 +248,7 @@ class Trp():
                 self.database.update_anime(anime)
 
                 logger.info("Episode ended, episode marked watched")
-                self.update()
+                self.update(console)
 
             else:
                 logger.info("Player closed with error, episode not marked watched")
@@ -327,7 +321,7 @@ class Trp():
 
         for anime in self.get_animes(["torrent_tracker", "anime_list"]):
             anime.torrent_client.update_files(anime)
-            self._select_groups(anime, console)
+            self._select_groups(anime, console=console)
             self.database.update_anime(anime)
 
             needed = self.default_reserve if anime.reserve_episodes == -1 else anime.reserve_episodes
@@ -446,7 +440,7 @@ class Trp():
         anime_with_classes.torrent_tracker = torrent_tracker
         anime_with_classes.torrent_client = torrent_client
         anime_with_classes.anime_list = anime_list
-        self._str_to_classes(anime_with_classes)
+        self._str_to_classes(anime_with_classes, True)
 
         animes = anime_with_classes.torrent_tracker.parse_anime(name + self.search_forums)
 
@@ -531,12 +525,9 @@ class Trp():
 def main():
     parser = argparse.ArgumentParser(description='Torrent player')
     parser.add_argument('--add', type=str, default="", help='Search anime on tracker contains in topic WORD1 and WORD2...')
-    parser.add_argument('--watched', type=int, default=0, help='Watched series of added anime')
     parser.add_argument('--watch', type=str, default="", help='Watch anime contains in topic WORD1 and WORD2...')
-    parser.add_argument('--proxy', type=str, default="", help='Proxy, use auto for auto provided proxy, use socks5://127.0.0.1:9150 for tor')
     parser.add_argument('--update', action='store_true', default=False, help='Manual update')
     parser.add_argument('--find', action='store_true', default=False, help='Find new episodes')
-    parser.add_argument('--reset_subtitles_group', action='store_true', default=False, help='If you want select another tranlater(s)')
     parser.add_argument('--migrate', action='store_true', default=False, help='Migrate from old database to new')
     parser.add_argument('--port', type=int, default=11111, help='Stream server port')
     parser.add_argument('--console', action='store_true', default=False, help='Console mode')
