@@ -107,7 +107,10 @@ class Window(QMainWindow):
         return -1
 
     def update(self):
-        self.trp.update()
+        try:
+            self.trp.update()
+        except Exception as e:
+            self._display_error(e)
 
     def watch_anime(self):
         try:
@@ -189,6 +192,7 @@ class Window(QMainWindow):
         if not len(exceptions): return
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Critical)
+        msg.setStyleSheet("QLabel{min-width: 250px;}");
         msg.setText("\n".join([str(x) for x in exceptions]))
         msg.setWindowTitle("Error")
         msg.exec_()
@@ -196,6 +200,7 @@ class Window(QMainWindow):
     def _display_error(self, exception):
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Critical)
+        msg.setStyleSheet("QLabel{min-width: 250px;}");
         msg.setText(str(exception))
         msg.setDetailedText("".join(traceback.TracebackException.from_exception(exception).format()))
         msg.setWindowTitle("Error")

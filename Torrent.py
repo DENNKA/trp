@@ -38,8 +38,8 @@ class Qbittorrent():
         self.qb = qbittorrent.Client(server_address)
 
         response = self.qb.login(username, password)
-        if response != "Ok." and response is not None:
-            raise(RuntimeError("Login " + response))
+        if not response or response != "Ok.":
+            raise RuntimeError("Login " + str(response))
 
         self.inited = True
 
