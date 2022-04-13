@@ -101,6 +101,7 @@ class Trp():
         # self.httpd.database = self.database
         # self.httpd.trp = self
         self.server_thread = threading.Thread(None, self.httpd.serve_forever)
+        self.server_thread.daemon = True
         self.server_thread.start()
         server_address = "http://127.0.0.1:" + str(port) + "/"
         logger.info("Start video server on " + server_address)
@@ -219,7 +220,7 @@ class Trp():
                     server_address = self.start_server(11111, anime.download_path, anime.hash, self.get_is_available(anime), video_file.torrent_file_id)
                 episode_address = server_address + video_file.path
                 logger.info(f'Start playing {episode_address}')
-                error = self.player.play(episode_address, subtitle_file)
+                error = self.player.play(episode_address, subtitle_file.path, audio_file.path)
                 self.shutdown_server()
                 if video_file.progress < 0.99:
                     anime.torrent_client.disable_sequential_download(anime.hash)

@@ -12,7 +12,12 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
         self.hash = None
         self.is_available = None
         self.torrent_file_id = None
+        self.is_run = True
         HTTPServer.__init__(self, *args, **kwargs)
+
+    def shutdown(self):
+        self.is_run = False
+        super().shutdown()
 
 
 BYTE_RANGE_RE = re.compile(r'bytes=(\d+)-(\d+)?$')
@@ -53,7 +58,7 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
             if self.server.hash is not None and self.server.is_available is not None:
                 first = start + readed_bytes
                 last = first + to_read
-                while not self.server.is_available(self.server.hash, self.server.torrent_file_id, first, last):
+                while not self.server.is_available(self.server.hash, self.server.torrent_file_id, first, last) and self.server.is_run:
                     print(f'SERVER: wait for pieces ({first}-{last} bytes)')
                     time.sleep(1)
             if to_read == 0:

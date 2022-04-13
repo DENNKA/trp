@@ -14,8 +14,11 @@ class Player():
         ftr = [3600,60,1]
         return sum([a * b for a, b in zip(ftr, map(int, string.split(':')))])
 
-    def play(self, file, subtitles=None):
-        process = Popen(['mpv', file, "--term-status-msg=${time-pos} / ${duration}"], stdout=PIPE, stderr=PIPE, universal_newlines=True)
+    def play(self, file, subtitle_path=None, audio_path=None):
+        cmd = ['mpv', file, "--term-status-msg=${time-pos} / ${duration}"]
+        subtitle_cmd = [f'--sub-file= {subtitle_path}'] if subtitle_path else []
+        audio_cmd = [f'--audio-file={audio_path}'] if audio_path else []
+        process = Popen(cmd + subtitle_cmd + audio_cmd, stdout=PIPE, stderr=PIPE, universal_newlines=True)
         error = 1
         while True:
             line = process.stderr.readline()
