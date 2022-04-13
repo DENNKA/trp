@@ -95,13 +95,8 @@ class Window(QMainWindow):
         delete_button.clicked.connect(self.delete_anime)
         update_button.clicked.connect(self.update)
 
-    def question(self, items : list, text):
-        try:
-            ValueError("123")
-        except Exception as e:
-            self._display_error(e)
-
-        item, ok = QInputDialog.getItem(self, text, "Select one", items, 0, False)
+    def question(self, items : list, text : str, additional_text="Select one"):
+        item, ok = QInputDialog.getItem(self, text, additional_text, items, 0, False)
         if ok and item:
             return item
         return -1
@@ -259,7 +254,10 @@ class AddAnimeDialog(QDialog):
         self.name_edit = QLineEdit()
         self.quality_combobox = QComboBox()
         for i, q in enumerate(self.trp.get_quality_list()):
-            self.quality_combobox.addItem(str(q))
+            string = str(q)
+            if string == "-1":
+                string = "Manual"
+            self.quality_combobox.addItem(string)
             if str(q) == default_quality:
                 self.quality_combobox.setCurrentIndex(i)
         self.bdremux_checkbox = QCheckBox("BDRemux")

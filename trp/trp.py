@@ -441,6 +441,8 @@ class Trp():
         # quality 1080 -> index in quality_list, -1 is manual
 
         quality_list = self.get_quality_list()
+        if quality.lower() == "manual":
+            quality = -1
 
         anime_with_classes = Anime()
         anime_with_classes.torrent_tracker = torrent_tracker
@@ -455,7 +457,7 @@ class Trp():
 
         anime = None
 
-        if quality != -1:
+        if int(quality) != -1:
             quality = quality_list.index(int(quality))
             quality = quality_list[quality]
             for a in animes:
@@ -473,16 +475,24 @@ class Trp():
                         anime = a
                         break
         else:
-            x = PrettyTable()
-            x.field_names = ["i", "forum", "topic", "id", "size", "s", "l", "c", "date"]
-            add = list()
-            for i, anime in enumerate(animes):
-                add = [i, fill(anime.forum, width=12), fill(anime.topic, width=60), str(round(self.bytes_to(anime.size, 'g'), 2)) + " GiB",
-                        anime.seeds, anime.leechs, anime.downloads, time.strftime("%D", time.localtime(anime.torrent_date))]
-                x.add_row(add)
-            print(x.get_string(fields=["i", "forum", "topic", "size", "s", "l", "c", "date"]))
-            num = int(input("Type anime number: "))
-            anime = animes[num]
+            if console:
+                x = PrettyTable()
+                x.field_names = ["i", "forum", "topic", "id", "size", "s", "l", "c", "date"]
+                add = list()
+                for i, anime in enumerate(animes):
+                    add = [i, fill(anime.forum, width=12), fill(anime.topic, width=60), str(round(self.bytes_to(anime.size, 'g'), 2)) + " GiB",
+                            anime.seeds, anime.leechs, anime.downloads, time.strftime("%D", time.localtime(anime.torrent_date))]
+                    x.add_row(add)
+                print(x.get_string(fields=["i", "forum", "topic", "size", "s", "l", "c", "date"]))
+                num = int(input("Type anime number: "))
+                anime = animes[num]
+            else:
+                selected_topic = self.gui.question([a.topic for a in animes], "Select anime:")
+                if selected_topic:
+                    for a in animes:
+                        if a.topic == selected_topic:
+                            anime = a
+                            break
 
         if anime == None:
             raise ValueError("Anime not selected")
