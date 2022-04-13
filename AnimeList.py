@@ -1,4 +1,4 @@
-from shikimori_api import Shikimori
+import shikimori_api
 import oauthlib
 
 import requests
@@ -12,7 +12,7 @@ def token_saver(token: dict):
         f.write(json.dumps(token))
 
 
-class AnimeList():
+class Shikimori():
     def __init__(self, proxy):
         # FIXME: proxy not implemented
         self.inited = False
@@ -20,21 +20,21 @@ class AnimeList():
 
     def init(self, cfg):
         if self.inited: return
-        self.client_id = cfg['shikimori']['client_id']
-        self.client_secret = cfg['shikimori']['client_secret']
+        self.client_id = cfg['Shikimori']['client_id']
+        self.client_secret = cfg['Shikimori']['client_secret']
         self._login()
         self.api = self.s_session.get_api()
         self.inited = True
 
     def _login(self, force_token=False):
         if not os.path.isfile('token.json') or force_token:
-            self.s_session = Shikimori("trp", client_id=self.client_id, client_secret=self.client_secret, token_saver=token_saver)
+            self.s_session = shikimori_api.Shikimori("trp", client_id=self.client_id, client_secret=self.client_secret, token_saver=token_saver)
             print("Go to link and write code to console ", self.s_session.get_auth_url())
             code = input('Authorization Code: ')
             self.s_session.fetch_token(code)
         with open('token.json') as f:
             token = json.load(f)
-        self.s_session = Shikimori("trp", client_id=self.client_id, client_secret=self.client_secret, token=token)
+        self.s_session = shikimori_api.Shikimori("trp", client_id=self.client_id, client_secret=self.client_secret, token=token)
 
     def _get_user_rate_id(self, id_anime, episodes=0):
         try_n = 2
