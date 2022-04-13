@@ -11,6 +11,7 @@ cfg = configparser.ConfigParser()
 cfg.read("settings.cfg")
 @pytest.mark.parametrize(
         ('torrent_client'), [(x) for x in TorrentClients(cfg, None).get_all_classes(False)])
+@pytest.mark.high_dependency()
 class TestTorrentClient:
     def test_add_update_remove_torrent(self, torrent_client):
         anime = Anime()
