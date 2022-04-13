@@ -7,10 +7,6 @@ import Episode
 
 import logging
 logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="[%(levelname)s]:%(filename)s:%(funcName)s(%(lineno)d) : %(message)s",
-)
 
 class SingletonForParserFiles(object):
     def __new__(self, *args, **kwargs):

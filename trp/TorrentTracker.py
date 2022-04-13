@@ -12,10 +12,6 @@ import rutracker
 
 import logging
 logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(levelname)s]:%(filename)s:%(funcName)s(%(lineno)d) : %(message)s",
-)
 
 from Anime import Anime
 

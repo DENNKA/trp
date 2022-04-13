@@ -6,10 +6,6 @@ import collections
 
 import logging
 logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="[%(levelname)s]:%(filename)s:%(funcName)s(%(lineno)d) : %(message)s",
-)
 
 from Anime import Anime
 from File import File

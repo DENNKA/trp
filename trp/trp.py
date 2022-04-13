@@ -26,11 +26,16 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.DEBUG,
     format="[%(levelname)s]:%(filename)s:%(funcName)s(%(lineno)d) : %(message)s",
+    force=True,
+    handlers=[
+        logging.FileHandler("trp.log"),
+        logging.StreamHandler()
+    ]
 )
 
 from Player import Player
-from Torrent import *
-from Parser import TorrentTrackers
+from TorrentClient import *
+from TorrentTracker import TorrentTrackers
 from ParserFiles import ParserFiles
 from AnimeList import AnimeLists
 from Server import get_server

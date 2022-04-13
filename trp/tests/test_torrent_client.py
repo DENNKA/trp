@@ -2,7 +2,7 @@ import sys
 import tempfile
 from Anime import Anime
 sys.path.append(".")
-from Torrent import TorrentClients
+from TorrentClient import TorrentClients
 import configparser
 import pytest
 

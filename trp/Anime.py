@@ -9,10 +9,6 @@ from ParserFiles import ParserFiles
 
 import logging
 logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="[%(levelname)s]:%(filename)s:%(funcName)s(%(lineno)d) : %(message)s",
-)
 
 class Anime(DbElement.DbElement):
     def __init__(self, vars = None):
