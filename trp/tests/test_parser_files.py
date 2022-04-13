@@ -1,6 +1,6 @@
 from pathlib import Path
 import sys
-sys.path.append(".")
+sys.path.append("trp")
 import ParserFiles
 import File
 import pytest

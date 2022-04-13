@@ -1,7 +1,7 @@
 import sys
 import tempfile
 from Anime import Anime
-sys.path.append(".")
+sys.path.append("trp")
 from TorrentClient import TorrentClients
 import configparser
 import pytest
@@ -16,7 +16,7 @@ class TestTorrentClient:
         anime = Anime()
         try:
             with tempfile.TemporaryDirectory() as tempdir:
-                anime.hash = torrent_client.add_torrent("./tests/test.torrent", tempdir)
+                anime.hash = torrent_client.add_torrent("./trp/tests/test.torrent", tempdir)
                 assert anime.hash
                 errors = torrent_client.update_files(anime)
                 for error in errors:
