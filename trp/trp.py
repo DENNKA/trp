@@ -163,7 +163,10 @@ class Trp():
         once = 1
         while stream or once:
             once = 0
-            anime.torrent_client.update_files(anime)
+            if anime.torrent_client.inited:
+                anime.torrent_client.update_files(anime)
+            else:
+                logger.warning("Can't connect to client while watch, use information from database")
 
             episode_number = anime.episodes_watched + 1
 
@@ -225,7 +228,7 @@ class Trp():
                     server_address = self.start_server(11111, anime.download_path, anime.hash, self.get_is_available(anime), video_file.torrent_file_id)
                 episode_address = server_address + video_file.path
                 logger.info(f'Start playing {episode_address}')
-                error = self.player.play(episode_address, subtitle_file.path, audio_file.path)
+                error = self.player.play(episode_address, subtitle_file, audio_file)
                 self.shutdown_server()
                 if video_file.progress < 0.99:
                     anime.torrent_client.disable_sequential_download(anime.hash)
