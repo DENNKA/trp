@@ -83,7 +83,7 @@ class Database:
         animes_out = list()
         for anime in animes:
             anime_out = Anime(dict(zip(columns, anime)))
-            self._get_episodes(anime)
+            self._get_episodes(anime_out)
             animes_out.append(anime_out)
         return animes_out
 
