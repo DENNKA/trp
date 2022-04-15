@@ -3,7 +3,6 @@ import requests
 from retry import retry
 import tempfile
 from pathlib import Path
-from fp.fp import FreeProxy
 import sys
 import re
 from ListClass import ListClass
