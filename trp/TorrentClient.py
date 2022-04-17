@@ -3,39 +3,57 @@ import os
 import re
 import time
 import collections
+import requests
+import urllib3
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 from Anime import Anime
 from File import File
 from ListClass import ListClass
+from LazyInit import lazy_init
 
-def make_iter(x):
-    if isinstance(x, collections.Iterable):
-        return x
-    else:
-        return (x,)
+def decorator_for_init(cls, orig_func):
+    def decorator(*args, **kwargs):
+        try:
+            cls.init(args[0])
+            result = orig_func(*args, **kwargs)
+        except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError):
+            args[0].inited = False
+            raise NotOpen()
+        return result
+    return decorator
 
-class Qbittorrent():
+class NotOpen(Exception):
     def __init__(self):
+        super().__init__("Torrent client not open")
+
+class CantLogin(Exception):
+    def __init__(self):
+        super().__init__("Can't login to torrent client")
+
+@lazy_init(decorator_for_init)
+class Qbittorrent():
+    def __init__(self, cfg):
+        self.cfg = cfg
         self.inited = False
         self.rid = 0
         self.cl_to_db = [('name', 'path'), ('size', 'size'), ('progress', 'progress'), ('priority', 'priority'), ('piece_range', 'piece_range'), ('availability', 'availability'), ('index', 'torrent_file_id')]
 
-    def init(self, cfg):
+    def init(self):
         if self.inited:
             return
 
-        self.cfg = cfg
-        server_address = cfg['Qbittorrent']['server_address']
-        username = cfg['Qbittorrent']['username']
-        password = cfg['Qbittorrent']['password']
+        server_address = self.cfg['Qbittorrent']['server_address']
+        username = self.cfg['Qbittorrent']['username']
+        password = self.cfg['Qbittorrent']['password']
         self.qb = qbittorrent.Client(server_address)
 
         response = self.qb.login(username, password)
         if response and response != "Ok.":
-            raise RuntimeError("Login " + str(response))
+            raise CantLogin()
 
         self.inited = True
 
@@ -141,8 +159,8 @@ class Qbittorrent():
         file_torrent = self._get_file(hash, torrent_file_id)
         piece_start, piece_end = file_torrent['piece_range']
         check_start = piece_start + int(bytes_start / piece_size)
-        check_end = min(piece_start + int(bytes_end / piece_size), piece_end)
-        for i in range(check_start, check_end):
+        check_end = min(piece_start + int(bytes_end / piece_size) + 1, piece_end)
+        for i in range(check_start, check_end + 1):
             if i >= len(pieces): break
             if pieces[i] != 2:
                 return False
@@ -198,5 +216,5 @@ class TorrentClients(ListClass):
         # proxy is not used
         self.cfg = cfg
         self.classes = {
-                'Qbittorrent': Qbittorrent(),
+                'Qbittorrent': Qbittorrent(cfg),
                 }

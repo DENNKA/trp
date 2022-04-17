@@ -13,6 +13,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 from Anime import Anime
+from LazyInit import lazy_init
+
+def decorator_for_init(cls, orig_func):
+    def decorator(*args, **kwargs):
+        try:
+            cls.init(args[0])
+            result = orig_func(*args, **kwargs)
+        except requests.exceptions.RequestException as e:
+            print(e)
+            args[0].inited = False
+            raise ConnectionFailed()
+        return result
+    return decorator
 
 class TorrentTracker():
     def __init__(self, proxy):
@@ -24,28 +37,27 @@ class ConnectionFailed(Exception):
     def __init__(self):
         super().__init__("Connection to torrent tracker failed")
 
+@lazy_init(decorator_for_init)
 class Rutracker(TorrentTracker):
-    def __init__(self, proxy):
+    def __init__(self, cfg, proxy):
+        self.cfg = cfg
         self.inited = False
         super().__init__(proxy)
         self.tr_to_db = ['forum', 'topic', 'id_torrent', 'size', 'seeds', 'leechs', 'downloads', 'torrent_date']
 
-    @retry(logger=logger, tries=3)
-    def init(self, cfg):
+    @retry(logger=logger, tries=2)
+    def init(self):
         if self.inited: return
-        username = cfg['Rutracker']['username']
-        password = cfg['Rutracker']['password']
-        try:
-            self.current_proxy = self.proxy.get_proxy(self)
-            if self.current_proxy:
-                # prx = {'https': self.current_proxy, 'http': self.current_proxy}
-                prx = {self.current_proxy.split("://")[0]: self.current_proxy}
-                logger.info(f'Proxy: {prx}')
-            else:
-                prx = {}
-            self.tracker = rutracker.Rutracker(username, password, proxies=prx)
-        except requests.exceptions.RequestException:
-            raise ConnectionFailed()
+        username = self.cfg['Rutracker']['username']
+        password = self.cfg['Rutracker']['password']
+        self.current_proxy = self.proxy.get_proxy(self)
+        if self.current_proxy:
+            # prx = {'https': self.current_proxy, 'http': self.current_proxy}
+            prx = {self.current_proxy.split("://")[0]: self.current_proxy}
+            logger.info(f'Proxy: {prx}')
+        else:
+            prx = {}
+        self.tracker = rutracker.Rutracker(username, password, proxies=prx)
         self.inited = True
 
     def _search(self, name):
@@ -71,5 +83,5 @@ class TorrentTrackers(ListClass):
     def __init__(self, cfg, proxy):
         self.cfg = cfg
         self.classes = {
-                'Rutracker': Rutracker(proxy),
+                'Rutracker': Rutracker(cfg, proxy),
                 }

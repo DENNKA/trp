@@ -6,22 +6,39 @@ import json
 import os.path
 
 from ListClass import ListClass
+from LazyInit import lazy_init
+
+def decorator_for_init(cls, orig_func):
+    def decorator(*args, **kwargs):
+        try:
+            cls.init(args[0])
+            result = orig_func(*args, **kwargs)
+        except requests.exceptions.RequestException:
+            args[0].inited = False
+            raise ConnectionFailed()
+        return result
+    return decorator
+
+class ConnectionFailed(Exception):
+    def __init__(self):
+        super().__init__("Connection to animelist failed")
 
 def token_saver(token: dict):
     with open('token.json', 'w') as f:
         f.write(json.dumps(token))
 
-
+@lazy_init(decorator_for_init)
 class Shikimori():
-    def __init__(self, proxy):
+    def __init__(self, cfg, proxy):
         # FIXME: proxy not implemented
+        self.cfg = cfg
         self.inited = False
         self.proxy = proxy
 
-    def init(self, cfg):
+    def init(self):
         if self.inited: return
-        self.client_id = cfg['Shikimori']['client_id']
-        self.client_secret = cfg['Shikimori']['client_secret']
+        self.client_id = self.cfg['Shikimori']['client_id']
+        self.client_secret = self.cfg['Shikimori']['client_secret']
         self._login()
         self.api = self.s_session.get_api()
         self.inited = True
@@ -82,5 +99,5 @@ class AnimeLists(ListClass):
     def __init__(self, cfg, proxy):
         self.cfg = cfg
         self.classes = {
-                'Shikimori': Shikimori(proxy),
+                'Shikimori': Shikimori(cfg, proxy),
                 }

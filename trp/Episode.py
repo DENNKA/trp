@@ -16,11 +16,13 @@ class Episode(DbElement):
     def add_file(self, file : File):
         self.files.append(file)
 
-    def set_priority(self, priority : int, groups = None):
+    def set_priority(self, priority : int, groups = None, unmatched_priority = 0):
         # groups : list()
         for file in self.files:
-            if groups == None or file.group in groups:
+            if file.type == "video" or groups == None or file.group in groups:
                 file.priority = priority
+            else:
+                file.priority = unmatched_priority
 
     def get_files_from_type(self, type_name):
         files = []

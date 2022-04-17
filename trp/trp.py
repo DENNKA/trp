@@ -127,30 +127,26 @@ class Trp():
     def get_file(self, anime_name, type):
         return self.get_anime(anime_name).get_file(type)
 
-    def _str_to_classes(self, anime : Anime, raise_on_error=False):
+    def _str_to_classes(self, anime : Anime):
         # torrent_tracker, torrent_client, anime_list strings to class
         if anime.torrent_tracker and type(anime.torrent_tracker) == type(str()):
-            anime.torrent_tracker = self.torrent_trackers.get_class(anime.torrent_tracker, raise_on_error)
+            anime.torrent_tracker = self.torrent_trackers.get_class(anime.torrent_tracker)
         if anime.torrent_client and type(anime.torrent_client) == type(str()):
-            anime.torrent_client = self.torrent_clients.get_class(anime.torrent_client, raise_on_error)
+            anime.torrent_client = self.torrent_clients.get_class(anime.torrent_client)
         if anime.anime_list and type(anime.anime_list) == type(str()):
-            anime.anime_list = self.anime_lists.get_class(anime.anime_list, raise_on_error)
+            anime.anime_list = self.anime_lists.get_class(anime.anime_list)
 
-    def get_anime(self, anime_name, unnecessary=[]):
+    def get_anime(self, anime_name):
         animes = self.database.get_animes_by_name(anime_name)
         if len(animes) == 0:
             raise ValueError("Not found")
         anime = animes[0]
-        for var in unnecessary:
-            anime.set_variable(var, None)
         self._str_to_classes(anime)
         return anime
 
-    def get_animes(self, unnecessary=[]):
+    def get_animes(self):
         animes = self.database.get_animes()
         for anime in animes:
-            for var in unnecessary:
-                anime.set_variable(var, None)
             self._str_to_classes(anime)
         return animes
 
@@ -328,7 +324,7 @@ class Trp():
     def update(self, console=False):
         logger.info("Start update")
 
-        for anime in self.get_animes(["torrent_tracker", "anime_list"]):
+        for anime in self.get_animes():
             anime.torrent_client.update_files(anime)
             self._select_groups(anime, console=console)
             self.database.update_anime(anime)
@@ -451,7 +447,7 @@ class Trp():
         anime_with_classes.torrent_tracker = torrent_tracker
         anime_with_classes.torrent_client = torrent_client
         anime_with_classes.anime_list = anime_list
-        self._str_to_classes(anime_with_classes, True)
+        self._str_to_classes(anime_with_classes)
 
         animes = anime_with_classes.torrent_tracker.parse_anime(name + self.search_forums)
 
