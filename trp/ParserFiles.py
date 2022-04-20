@@ -96,7 +96,7 @@ class ParserFiles(SingletonForParserFiles):
             file.type = self.get_type(path)
             if file.type != "fonts":
                 if self._detect_extra(path):
-                    file.group = str(Path(*path.parts[1:])).rstrip('.')
+                    file.group = str('/'.join(path.parts[1:])).rstrip('.')
                     episodes[-1].add_file(file)
                     continue
 
@@ -108,12 +108,12 @@ class ParserFiles(SingletonForParserFiles):
                     continue
 
                 if file.type == "subtitle":
-                    file.group = str(Path(*path.parts[1 + subtitle_in_folder:-1])).rstrip('.')
+                    file.group = str('/'.join(path.parts[1 + subtitle_in_folder:-1])).rstrip('.')
                     episodes[file_episode].add_file(file)
                 else:
                     episodes[file_episode].add_file(file)
             else:
-                file.group = str(Path(*path.parts[1 + subtitle_in_folder:-2])).rstrip('.')
+                file.group = str('/'.join(path.parts[1 + subtitle_in_folder:-2])).rstrip('.')
                 episodes[0].add_file(file)
                 fonts.append(file)
 
