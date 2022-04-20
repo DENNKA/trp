@@ -47,7 +47,13 @@ class ParserFiles(SingletonForParserFiles):
         except KeyError:
             return "unknown"
 
+    def _detect_op_ed(self, path : Path):
+        match = re.search(r"\b(?:e(?:p(?:isode)?)?|0x|S\d?\d(OP|ED))\b", path.name, re.IGNORECASE)
+        return match.group(1) if match else None
+
     def _find_episode_number(self, path : Path):
+        if self._detect_op_ed(path):
+            return -1 # !
         parsed = anitopy.parse(path.name)
         try:
             return int(parsed['episode_number'].lstrip('0'))
@@ -55,7 +61,7 @@ class ParserFiles(SingletonForParserFiles):
             logger.warning(f'WARNING: use secondary parse method, file: {str(path)}')
             logger.debug(str(e))
             try:
-                return int(re.search(r"\b(?:e(?:p(?:isode)?)?|0x|S\d\dEP?)?\s*?(\d{1,4})\b", path.name, re.IGNORECASE).group(1))
+                return int(re.search(r"\b(?:e(?:p(?:isode)?)?|0x|S\d?\dEP?)?\s*?(\d{1,4})\b", path.name, re.IGNORECASE).group(1))
             except Exception as e:
                 logger.error("Can't parse episode number " + str(e))
                 raise CantParseEpisodeNumber(path)
