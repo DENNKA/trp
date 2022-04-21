@@ -28,7 +28,7 @@ logging.basicConfig(
     format="[%(levelname)s]:%(filename)s:%(funcName)s(%(lineno)d) : %(message)s",
     force=True,
     handlers=[
-        logging.FileHandler("trp.log"),
+        logging.FileHandler("trp.log", 'w'),
         logging.StreamHandler()
     ]
 )
@@ -222,9 +222,8 @@ class Trp():
                 else:
                     anime.torrent_client.enable_sequential_download(anime.hash)
                     server_address = self.start_server(11111, anime.download_path, anime.hash, self.get_is_available(anime), video_file.torrent_file_id)
-                episode_address = server_address + video_file.path
-                logger.info(f'Start playing {episode_address}')
-                error = self.player.play(episode_address, subtitle_file, audio_file)
+                logger.info(f'Start playing {server_address}')
+                error = self.player.play(server_address, video_file, subtitle_file, audio_file)
                 self.shutdown_server()
                 if video_file.progress < 0.99:
                     anime.torrent_client.disable_sequential_download(anime.hash)
