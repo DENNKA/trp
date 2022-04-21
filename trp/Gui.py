@@ -7,9 +7,38 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QPixmap, QStandardItemModel, QTextLayout
 from PyQt5.QtWidgets import QAbstractItemView, QApplication, QFrame, QGroupBox, QHBoxLayout, QLabel, QMainWindow, QMdiArea, QMenuBar, QMenu, QAction, QInputDialog, QDialog, QMessageBox, QPushButton, QDialogButtonBox, QSplitter, QTableWidgetItem, QVBoxLayout, QLineEdit, QGridLayout, QCheckBox, QComboBox, QTableWidget, QWidget
 
+import logging
+logger = logging.getLogger(__name__)
+
 from Anime import Anime
 import trp
 
+import inspect
+def base_handler(cls, orig_func):
+    def decorator(*args, **kwargs):
+        try:
+            result = orig_func(*args, **kwargs)
+            return result
+        except Exception as e:
+            args[0]._display_error(e)
+    return decorator
+
+def exceptions_handle(decorator):
+
+    class Decorator(object):
+        def __init__(self, cls):
+            self.cls = cls
+
+        def __call__(self, *args, **kwargs):
+            for name, method in inspect.getmembers(self.cls):
+                if name == "__init__" or (not inspect.ismethod(method) and not inspect.isfunction(method)) or inspect.isbuiltin(method):
+                    continue
+                setattr(self.cls, name, decorator(self.cls, method))
+            return self.cls(*args, **kwargs)
+
+    return Decorator
+
+@exceptions_handle(base_handler)
 class Window(QMainWindow):
     """Main Window."""
     def __init__(self, trp, cfg, torrent_clients, parent=None):
@@ -101,22 +130,15 @@ class Window(QMainWindow):
             return item
         return -1
 
-    def update(self):
-        try:
-            self.trp.update()
-        except Exception as e:
-            self._display_error(e)
+    def update(self, *_):
+        self.trp.update()
 
-    def watch_anime(self):
-        try:
-            row = self.table.currentRow()
-            anime = self.animes[row]
-            self.trp.watch(anime)
-        except Exception as e:
-            self._display_error(e)
-            return
+    def watch_anime(self, *_):
+        row = self.table.currentRow()
+        anime = self.animes[row]
+        self.trp.watch(anime)
 
-    def _table_click(self, row_id):
+    def _table_click(self, row_id, *_):
         self._update_row(self.animes[row_id], row_id)
 
     def _create_actions(self):
@@ -188,7 +210,9 @@ class Window(QMainWindow):
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Critical)
         msg.setStyleSheet("QLabel{min-width: 250px;}");
-        msg.setText("\n".join([str(x) for x in exceptions]))
+        text = "\n".join([str(x) for x in exceptions])
+        logger.error(text)
+        msg.setText(text)
         msg.setWindowTitle("Error")
         msg.exec_()
 
@@ -196,12 +220,15 @@ class Window(QMainWindow):
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Critical)
         msg.setStyleSheet("QLabel{min-width: 250px;}");
+        logger.error(str(exception))
+        trace = "".join(traceback.TracebackException.from_exception(exception).format())
+        logger.error(trace)
         msg.setText(str(exception))
-        msg.setDetailedText("".join(traceback.TracebackException.from_exception(exception).format()))
+        msg.setDetailedText(trace)
         msg.setWindowTitle("Error")
         msg.exec_()
 
-    def add_anime(self):
+    def add_anime(self, *_):
         add_anime_dialog = AddAnimeDialog(self.trp, self.cfg['trp']['quality'])
         add_anime_dialog.exec_()
         result = add_anime_dialog.get_result()
@@ -217,7 +244,7 @@ class Window(QMainWindow):
             if result['instant_play']:
                 self.trp.watch(anime)
 
-    def delete_anime(self):
+    def delete_anime(self, *_):
         dialog = QMessageBox()
         remove_button = dialog.addButton("Remove", QMessageBox.YesRole)
         delete_button = dialog.addButton("Delete with all data", QMessageBox.AcceptRole)
