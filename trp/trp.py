@@ -359,7 +359,6 @@ class Trp():
                         episode.set_priority(priority, [anime.subtitle_group, anime.audio_group])
                     except ValueError as e:
                         logger.error(e)
-                        return
 
                 logger.debug("Priorities: " + str(dict(zip(download, priorities))))
 
@@ -524,7 +523,7 @@ class Trp():
             if not console:
                 self.gui.display_errors(errors)
 
-            total_episodes = re.findall(r'\d+', anime.topic[anime.topic.find("из"):])[0]
+            total_episodes = anime.torrent_tracker.get_total_episodes(anime.id_torrent, anime.topic)
             anime.total_episodes = total_episodes
             self.database.update_anime(anime)
 

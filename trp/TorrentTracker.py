@@ -77,7 +77,10 @@ class Rutracker(TorrentTracker):
         return self.tracker.get_torrent(id, path=self.download_path)
 
     def get_total_episodes(self, id, topic):
-        return re.findall(r'\d+', topic[topic.find("из"):])[0]
+        try:
+            return int(re.findall(r'\d+', topic[topic.find("из"):])[0])
+        except IndexError:
+            return 1
 
 class TorrentTrackers(ListClass):
     def __init__(self, cfg, proxy):

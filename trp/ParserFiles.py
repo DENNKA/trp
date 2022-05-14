@@ -61,7 +61,7 @@ class ParserFiles(SingletonForParserFiles):
             logger.warning(f'WARNING: use secondary parse method, file: {str(path)}')
             logger.debug(str(e))
             try:
-                return int(re.search(r"\b(?:e(?:p(?:isode)?)?|0x|S\d?\dEP?)?\s*?(\d{1,4})\b", path.name, re.IGNORECASE).group(1))
+                return int(re.search(r"\b(?:e(?:p(?:isode)?)?|0x|S\d?\dEP?)\s*?(\d{1,4})\b", path.name, re.IGNORECASE).group(1))
             except Exception as e:
                 logger.error("Can't parse episode number " + str(e))
                 raise CantParseEpisodeNumber(path)
@@ -123,11 +123,17 @@ class ParserFiles(SingletonForParserFiles):
                 episodes[0].add_file(file)
                 fonts.append(file)
 
+        # if one unparsed episode (movie) make it first
+        episodes_numbers_all = list(episodes.keys())
+        if len(episodes_numbers_all) == 1 and episodes_numbers_all[0] == -1 or len(episodes_numbers_all) == 2 and sum(episodes_numbers_all) == -1:
+            episodes[1] = episodes.pop(-1)
+
         for episode_number, episode in episodes.items():
             episode.episode_number = episode_number
 
-        first_episode = min(filter(lambda e: isinstance(e, int) and e > 0, episodes.keys()))
-        last_episode = max(filter(lambda e: isinstance(e, int) and e > 0, episodes.keys()))
+        filtered_episodes_numbers = list(filter(lambda e: isinstance(e, int) and e > 0, episodes.keys()))
+        first_episode = min(filtered_episodes_numbers)
+        last_episode = max(filtered_episodes_numbers)
 
         return list(episodes.values()), fonts, first_episode, last_episode, self.exceptions
 
